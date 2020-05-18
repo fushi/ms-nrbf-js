@@ -4,7 +4,7 @@
   "description": "A library for decoding MS-NRBF encoded data",
   "main": "index.js",
   "scripts": {
-    "start": "tsc ./src/index.ts && node ./src/index.js",
+    "start": "tsc && node ./lib/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
