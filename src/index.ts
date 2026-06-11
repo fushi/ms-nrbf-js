@@ -1,3 +1,5 @@
+export * from "./enums.js";
+
 export function deserialize(_buffer: Buffer): unknown {
   throw new Error("Not implemented");
 }
