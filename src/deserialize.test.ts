@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
-import type { NrbfObject } from "./types.js";
+import type { NrbfMethodCall, NrbfMethodReturn, NrbfObject } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
 
@@ -249,6 +249,59 @@ describe("deserialize", () => {
       expect(result.members["IsActive"]).toBe(true);
       expect(result.members["Score"]).toBeCloseTo(3.14);
       expect(result.members["Values"]).toEqual([10, 20, 30]);
+    });
+
+    it("method_call.nrbf — BinaryMethodCall with inline args", () => {
+      const result = deserialize(readFileSync(join(fixturesDir, "method_call.nrbf"))) as NrbfMethodCall;
+      expect(result.kind).toBe("MethodCall");
+      expect(result.methodName).toBe("PerformAction");
+      expect(result.typeName).toBe("IMyService, AdvancedDemo, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
+      expect(result.args).toEqual(["payload-data", 7]);
+    });
+
+    it("method_return.nrbf — BinaryMethodReturn with inline return value", () => {
+      const result = deserialize(readFileSync(join(fixturesDir, "method_return.nrbf"))) as NrbfMethodReturn;
+      expect(result.kind).toBe("MethodReturn");
+      expect(result.returnValue).toBe("success");
+    });
+
+    it("object_graph.nrbf — complex graph with circular refs, nested classes, sparse arrays", () => {
+      const root = deserialize(readFileSync(join(fixturesDir, "object_graph.nrbf"))) as NrbfObject;
+      expect(root.typeName).toBe("GraphRoot");
+
+      // Circular Node references: NodeA.Peer → NodeB, NodeB.Peer → NodeA
+      const nodeA = root.members["NodeA"] as NrbfObject;
+      const nodeB = root.members["NodeB"] as NrbfObject;
+      expect(nodeA.typeName).toBe("Node");
+      expect(nodeA.members["Value"]).toBe(100);
+      expect(nodeA.members["Tag"]).toBe("Alpha");
+      expect(nodeA.members["Peer"]).toBe(nodeB);   // forward ref resolved
+
+      expect(nodeB.typeName).toBe("Node");
+      expect(nodeB.members["Value"]).toBe(200);
+      expect(nodeB.members["Tag"]).toBe("Beta");
+      expect(nodeB.members["Peer"]).toBe(nodeA);   // circular back-ref
+
+      // System.Version nested class
+      const ver = root.members["Version"] as NrbfObject;
+      expect(ver.typeName).toBe("System.Version");
+      expect(ver.members["_Major"]).toBe(4);
+      expect(ver.members["_Minor"]).toBe(8);
+
+      // Packet
+      const packet = root.members["Packet"] as NrbfObject;
+      expect(packet.members["Label"]).toBe("demo-packet");
+      expect(packet.members["Count"]).toBe(42);
+
+      // Matrix (rectangular BinaryArray, flattened row-major)
+      expect(root.members["Matrix"]).toEqual([11, 12, 13, 21, 22, 23]);
+
+      // Sparse arrays: nulls filled by ObjectNullMultiple/ObjectNullMultiple256
+      const sparse = root.members["SparseSmall"] as (string | null)[];
+      expect(sparse[0]).toBe("first");
+      expect(sparse[10]).toBe("Beta");
+      expect(sparse[11]).toBe("last");
+      expect(sparse[1]).toBeNull();
     });
   });
 });

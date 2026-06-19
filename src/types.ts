@@ -71,6 +71,25 @@ export interface ArrayInfo {
   length: number;
 }
 
+// Method invocation stream roots (not values — only appear as the stream root)
+export interface NrbfMethodCall {
+  kind: "MethodCall";
+  methodName: string;
+  typeName: string;
+  callContext?: string;
+  args?: NrbfValue[];
+}
+
+export interface NrbfMethodReturn {
+  kind: "MethodReturn";
+  returnValue?: NrbfValue;
+  callContext?: string;
+  args?: NrbfValue[];
+}
+
+// Top-level return type of deserialize()
+export type NrbfRoot = NrbfValue | NrbfMethodCall | NrbfMethodReturn;
+
 // §2.2.2.1 — Value is absent when primitiveTypeEnum is Null
 export type ValueWithCode =
   | { primitiveTypeEnum: PrimitiveTypeEnumeration.Null }

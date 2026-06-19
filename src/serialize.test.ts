@@ -9,7 +9,7 @@ import type { NrbfObject, NrbfValue } from "./types.js";
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
 
 function roundTrip(value: NrbfValue): NrbfValue {
-  return deserialize(serialize(value));
+  return deserialize(serialize(value)) as NrbfValue;
 }
 
 describe("serialize", () => {
