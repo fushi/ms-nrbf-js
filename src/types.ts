@@ -52,6 +52,9 @@ export type MemberTypeInfo = MemberTypeEntry[];
 export interface NrbfObject {
   typeName: string;
   libraryName?: string; // absent for system-library classes
+  // Primitive type for each Primitive- or PrimitiveArray-typed member (element type for arrays).
+  // Populated by the deserializer; used by the serializer to avoid type inference errors.
+  memberTypes?: { [name: string]: PrimitiveTypeEnumeration };
   members: { [name: string]: NrbfValue };
 }
 

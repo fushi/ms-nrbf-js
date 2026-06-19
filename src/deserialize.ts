@@ -220,6 +220,26 @@ class Deserializer {
     return members;
   }
 
+  // Build a memberTypes record from MemberTypeInfo for Primitive/PrimitiveArray members.
+  private extractMemberTypes(
+    classInfo: ClassInfo,
+    memberTypeInfo: MemberTypeInfo,
+  ): Record<string, PrimitiveTypeEnumeration> | undefined {
+    const result: Record<string, PrimitiveTypeEnumeration> = {};
+    let any = false;
+    for (let i = 0; i < classInfo.memberNames.length; i++) {
+      const entry = memberTypeInfo[i]!;
+      if (
+        entry.binaryType === BinaryTypeEnumeration.Primitive ||
+        entry.binaryType === BinaryTypeEnumeration.PrimitiveArray
+      ) {
+        result[classInfo.memberNames[i]!] = entry.primitiveType;
+        any = true;
+      }
+    }
+    return any ? result : undefined;
+  }
+
   private storeClassMeta(meta: ClassMeta, nameKey: string): void {
     this.classesByObjectId.set(meta.classInfo.objectId, meta);
     this.classesByName.set(nameKey, meta);
@@ -238,6 +258,8 @@ class Deserializer {
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
     const libraryName = this.libraries.get(libraryId);
     if (libraryName !== undefined) obj.libraryName = libraryName;
+    const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
+    if (memberTypes !== undefined) obj.memberTypes = memberTypes;
     this.objects.set(classInfo.objectId, obj);
     obj.members = this.readMembers(classInfo, memberTypeInfo);
     return obj;
@@ -249,6 +271,8 @@ class Deserializer {
     this.storeClassMeta({ classInfo, memberTypeInfo }, classInfo.name);
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
+    const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
+    if (memberTypes !== undefined) obj.memberTypes = memberTypes;
     this.objects.set(classInfo.objectId, obj);
     obj.members = this.readMembers(classInfo, memberTypeInfo);
     return obj;
@@ -291,6 +315,10 @@ class Deserializer {
     if (meta.libraryId !== undefined) {
       const libraryName = this.libraries.get(meta.libraryId);
       if (libraryName !== undefined) obj.libraryName = libraryName;
+    }
+    if (meta.memberTypeInfo) {
+      const memberTypes = this.extractMemberTypes(meta.classInfo, meta.memberTypeInfo);
+      if (memberTypes !== undefined) obj.memberTypes = memberTypes;
     }
     this.objects.set(objectId, obj);
     obj.members = meta.memberTypeInfo

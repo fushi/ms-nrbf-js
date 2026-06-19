@@ -188,6 +188,17 @@ class Serializer {
       this.w.writePrimitive(entry.primitiveType, value as PrimitiveValue);
       return;
     }
+    if (entry.binaryType === BinaryTypeEnumeration.PrimitiveArray && Array.isArray(value)) {
+      // Use the exact element type from the entry, not inferred from JS values
+      const id = this.nextId++;
+      this.objectIds.set(value, id);
+      this.w.writeByte(RecordTypeEnumeration.ArraySinglePrimitive);
+      this.w.writeInt32(id);
+      this.w.writeInt32(value.length);
+      this.w.writeByte(entry.primitiveType);
+      for (const el of value) this.w.writePrimitive(entry.primitiveType, el as PrimitiveValue);
+      return;
+    }
     this.writeAnyValue(value);
   }
 
@@ -199,7 +210,16 @@ class Serializer {
     return obj.libraryName ? `${obj.typeName}@${obj.libraryName}` : obj.typeName;
   }
 
-  private inferMemberTypeEntry(value: NrbfValue): MemberTypeEntry {
+  // `hint` is the PrimitiveTypeEnumeration from the original deserialized memberTypes,
+  // used to avoid lossy inference (e.g. Single→Double, UInt32→Double).
+  private inferMemberTypeEntry(value: NrbfValue, hint?: PrimitiveTypeEnumeration): MemberTypeEntry {
+    if (hint !== undefined) {
+      if (Array.isArray(value)) {
+        return { binaryType: BinaryTypeEnumeration.PrimitiveArray, primitiveType: hint };
+      }
+      return { binaryType: BinaryTypeEnumeration.Primitive, primitiveType: hint };
+    }
+
     if (value === null) return { binaryType: BinaryTypeEnumeration.Object };
 
     const primType = inferPrimitiveType(value);
@@ -274,7 +294,9 @@ class Serializer {
 
     // First instance → ClassWithMembersAndTypes or SystemClassWithMembersAndTypes
     const memberNames = memberEntries.map(([k]) => k);
-    const memberTypeEntries = memberEntries.map(([, v]) => this.inferMemberTypeEntry(v));
+    const memberTypeEntries = memberEntries.map(([name, v]) =>
+      this.inferMemberTypeEntry(v, obj.memberTypes?.[name]),
+    );
     this.classMeta.set(key, { firstObjectId: objectId, memberNames, memberTypeEntries });
 
     if (obj.libraryName) {

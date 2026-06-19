@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { serialize } from "./serialize.js";
+import { PrimitiveTypeEnumeration } from "./enums.js";
 import type { NrbfObject, NrbfValue } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
@@ -142,6 +143,77 @@ describe("serialize", () => {
       const result = roundTrip(container) as NrbfObject;
       expect((result.members["a"] as NrbfObject).members["label"]).toBe("hot");
       expect((result.members["b"] as NrbfObject).members["label"]).toBe("hot");
+    });
+  });
+
+  describe("memberTypes type fidelity", () => {
+    function typedObj(memberTypes: NrbfObject["memberTypes"], members: NrbfObject["members"]): NrbfObject {
+      return { typeName: "T", memberTypes, members };
+    }
+
+    it("round-trips Single without promoting to Double", () => {
+      const obj = typedObj({ v: PrimitiveTypeEnumeration.Single }, { v: 1.5 });
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["v"]).toBeCloseTo(1.5, 4);
+      expect(result.memberTypes?.["v"]).toBe(PrimitiveTypeEnumeration.Single);
+    });
+
+    it("round-trips UInt32 > Int32.MaxValue without promoting to Double", () => {
+      const obj = typedObj({ v: PrimitiveTypeEnumeration.UInt32 }, { v: 4_294_967_295 });
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["v"]).toBe(4_294_967_295);
+      expect(result.memberTypes?.["v"]).toBe(PrimitiveTypeEnumeration.UInt32);
+    });
+
+    it("round-trips Byte without widening to Int32", () => {
+      const obj = typedObj({ v: PrimitiveTypeEnumeration.Byte }, { v: 255 });
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["v"]).toBe(255);
+      expect(result.memberTypes?.["v"]).toBe(PrimitiveTypeEnumeration.Byte);
+    });
+
+    it("round-trips SByte without widening to Int32", () => {
+      const obj = typedObj({ v: PrimitiveTypeEnumeration.SByte }, { v: -128 });
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["v"]).toBe(-128);
+      expect(result.memberTypes?.["v"]).toBe(PrimitiveTypeEnumeration.SByte);
+    });
+
+    it("round-trips Int16 without widening to Int32", () => {
+      const obj = typedObj({ v: PrimitiveTypeEnumeration.Int16 }, { v: -32768 });
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["v"]).toBe(-32768);
+      expect(result.memberTypes?.["v"]).toBe(PrimitiveTypeEnumeration.Int16);
+    });
+
+    it("round-trips UInt16 without widening to Int32", () => {
+      const obj = typedObj({ v: PrimitiveTypeEnumeration.UInt16 }, { v: 65535 });
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["v"]).toBe(65535);
+      expect(result.memberTypes?.["v"]).toBe(PrimitiveTypeEnumeration.UInt16);
+    });
+
+    it("round-trips PrimitiveArray of Single with correct element type", () => {
+      const obj = typedObj({ vals: PrimitiveTypeEnumeration.Single }, { vals: [1.5, 2.5, 3.5] });
+      const result = roundTrip(obj) as NrbfObject;
+      const vals = result.members["vals"] as number[];
+      expect(vals[0]).toBeCloseTo(1.5, 4);
+      expect(vals[2]).toBeCloseTo(3.5, 4);
+      expect(result.memberTypes?.["vals"]).toBe(PrimitiveTypeEnumeration.Single);
+    });
+
+    it("deserialized objects carry memberTypes that survive re-serialization", () => {
+      // Round-trip the sample fixture and verify memberTypes propagates
+      const buf = readFileSync(join(fixturesDir, "sample.nrbf"));
+      const first = deserialize(buf) as NrbfObject;
+      expect(first.memberTypes?.["Age"]).toBe(PrimitiveTypeEnumeration.Int32);
+      expect(first.memberTypes?.["IsActive"]).toBe(PrimitiveTypeEnumeration.Boolean);
+      expect(first.memberTypes?.["Score"]).toBe(PrimitiveTypeEnumeration.Double);
+      expect(first.memberTypes?.["Values"]).toBe(PrimitiveTypeEnumeration.Int32);
+
+      const second = deserialize(serialize(first)) as NrbfObject;
+      expect(second.memberTypes?.["Age"]).toBe(PrimitiveTypeEnumeration.Int32);
+      expect(second.memberTypes?.["Score"]).toBe(PrimitiveTypeEnumeration.Double);
     });
   });
 
