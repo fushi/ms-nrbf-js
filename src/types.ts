@@ -48,6 +48,23 @@ export type MemberTypeEntry =
 
 export type MemberTypeInfo = MemberTypeEntry[];
 
+// Public output types for the deserializer / input types for the serializer
+export interface NrbfObject {
+  typeName: string;
+  libraryName?: string; // absent for system-library classes
+  members: { [name: string]: NrbfValue };
+}
+
+export type NrbfValue =
+  | null
+  | boolean
+  | number
+  | bigint
+  | string
+  | DateTime
+  | NrbfObject
+  | NrbfValue[];
+
 // §2.4.2.1
 export interface ArrayInfo {
   objectId: number;
