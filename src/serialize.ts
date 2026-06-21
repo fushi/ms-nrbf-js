@@ -1,5 +1,6 @@
 import {
   BinaryTypeEnumeration,
+  MessageFlags,
   PrimitiveTypeEnumeration,
   RecordTypeEnumeration,
 } from "./enums.js";
@@ -7,7 +8,10 @@ import { BinaryWriter } from "./writer.js";
 import type {
   DateTime,
   MemberTypeEntry,
+  NrbfMethodCall,
+  NrbfMethodReturn,
   NrbfObject,
+  NrbfRoot,
   NrbfValue,
   PrimitiveValue,
 } from "./types.js";
@@ -51,6 +55,17 @@ function inferPrimitiveType(v: NrbfValue): PrimitiveTypeEnumeration | undefined 
   return undefined;
 }
 
+// Infer the PrimitiveTypeEnumeration for a ValueWithCode field — includes String, unlike inferPrimitiveType.
+function inferValueWithCodeType(v: NrbfValue): PrimitiveTypeEnumeration {
+  if (v === null) return PrimitiveTypeEnumeration.Null;
+  if (typeof v === "string") return PrimitiveTypeEnumeration.String;
+  const pt = inferPrimitiveType(v);
+  if (pt !== undefined) return pt;
+  throw new TypeError(
+    `serialize: cannot encode ${Array.isArray(v) ? "array" : "object"} as ValueWithCode — only primitives and strings are supported`,
+  );
+}
+
 // If every element of `arr` has the same primitive type, return it. Otherwise undefined.
 function uniformPrimitiveType(arr: NrbfValue[]): PrimitiveTypeEnumeration | undefined {
   if (arr.length === 0) return undefined;
@@ -80,7 +95,13 @@ class Serializer {
   private readonly classMeta = new Map<string, ClassSerializeMeta>();
   private readonly libraryIds = new Map<string, number>();
 
-  run(value: NrbfValue): Buffer {
+  run(root: NrbfRoot): Buffer {
+    if (typeof root === "object" && root !== null && !Array.isArray(root) && !isDateTime(root)) {
+      if ((root as NrbfMethodCall).kind === "MethodCall") return this.runMethodCall(root as NrbfMethodCall);
+      if ((root as NrbfMethodReturn).kind === "MethodReturn") return this.runMethodReturn(root as NrbfMethodReturn);
+    }
+
+    const value = root as NrbfValue;
     if (
       value === null ||
       typeof value === "boolean" ||
@@ -89,7 +110,7 @@ class Serializer {
       isDateTime(value)
     ) {
       throw new TypeError(
-        "serialize: root value must be a string, NrbfObject, or array — bare primitives have no objectId",
+        "serialize: root value must be a string, NrbfObject, NrbfMethodCall, NrbfMethodReturn, or array — bare primitives have no objectId",
       );
     }
 
@@ -116,6 +137,62 @@ class Serializer {
 
     this.w.writeByte(RecordTypeEnumeration.MessageEnd);
     return this.w.toBuffer();
+  }
+
+  private writeHeader(): void {
+    this.w.writeByte(RecordTypeEnumeration.SerializedStreamHeader);
+    this.w.writeInt32(1);  // rootId — unused for method call/return streams
+    this.w.writeInt32(-1); // headerId
+    this.w.writeInt32(1);  // majorVersion
+    this.w.writeInt32(0);  // minorVersion
+  }
+
+  private runMethodCall(call: NrbfMethodCall): Buffer {
+    let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
+    if (call.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
+    if (call.args !== undefined) flags = (flags & ~MessageFlags.NoArgs) | MessageFlags.ArgsInline;
+
+    this.writeHeader();
+    this.w.writeByte(RecordTypeEnumeration.MethodCall);
+    this.w.writeInt32(flags);
+    this.writeStringValueWithCode(call.methodName);
+    this.writeStringValueWithCode(call.typeName);
+    if (call.callContext !== undefined) this.writeStringValueWithCode(call.callContext);
+    if (call.args !== undefined) this.writeArrayOfValueWithCode(call.args);
+    this.w.writeByte(RecordTypeEnumeration.MessageEnd);
+    return this.w.toBuffer();
+  }
+
+  private runMethodReturn(ret: NrbfMethodReturn): Buffer {
+    let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
+    flags |= ret.returnValue !== undefined ? MessageFlags.ReturnValueInline : MessageFlags.ReturnValueVoid;
+    if (ret.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
+    if (ret.args !== undefined) flags = (flags & ~MessageFlags.NoArgs) | MessageFlags.ArgsInline;
+
+    this.writeHeader();
+    this.w.writeByte(RecordTypeEnumeration.MethodReturn);
+    this.w.writeInt32(flags);
+    if (ret.returnValue !== undefined) this.writeValueWithCode(ret.returnValue);
+    if (ret.callContext !== undefined) this.writeStringValueWithCode(ret.callContext);
+    if (ret.args !== undefined) this.writeArrayOfValueWithCode(ret.args);
+    this.w.writeByte(RecordTypeEnumeration.MessageEnd);
+    return this.w.toBuffer();
+  }
+
+  private writeStringValueWithCode(s: string): void {
+    this.w.writeByte(PrimitiveTypeEnumeration.String);
+    this.w.writeLengthPrefixedString(s);
+  }
+
+  private writeValueWithCode(v: NrbfValue): void {
+    const pt = inferValueWithCodeType(v);
+    this.w.writeByte(pt);
+    if (pt !== PrimitiveTypeEnumeration.Null) this.w.writePrimitive(pt, v as PrimitiveValue);
+  }
+
+  private writeArrayOfValueWithCode(arr: NrbfValue[]): void {
+    this.w.writeInt32(arr.length);
+    for (const v of arr) this.writeValueWithCode(v);
   }
 
   private collectLibraries(value: NrbfValue, seen: Set<object>): void {
@@ -347,6 +424,6 @@ class Serializer {
   }
 }
 
-export function serialize(value: NrbfValue): Buffer {
-  return new Serializer().run(value);
+export function serialize(root: NrbfRoot): Buffer {
+  return new Serializer().run(root);
 }

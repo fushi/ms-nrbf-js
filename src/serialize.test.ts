@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { serialize } from "./serialize.js";
 import { PrimitiveTypeEnumeration } from "./enums.js";
-import type { NrbfObject, NrbfValue } from "./types.js";
+import type { NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
 
@@ -229,6 +229,117 @@ describe("serialize", () => {
       expect(result.members["IsActive"]).toBe(true);
       expect(result.members["Score"]).toBeCloseTo(3.14);
       expect(result.members["Values"]).toEqual([10, 20, 30]);
+    });
+  });
+
+  describe("NrbfMethodCall", () => {
+    function roundTripCall(call: NrbfMethodCall): NrbfMethodCall {
+      return deserialize(serialize(call)) as NrbfMethodCall;
+    }
+
+    it("round-trips methodName and typeName", () => {
+      const call: NrbfMethodCall = { kind: "MethodCall", methodName: "DoWork", typeName: "IService" };
+      const result = roundTripCall(call);
+      expect(result.kind).toBe("MethodCall");
+      expect(result.methodName).toBe("DoWork");
+      expect(result.typeName).toBe("IService");
+      expect(result.args).toBeUndefined();
+      expect(result.callContext).toBeUndefined();
+    });
+
+    it("round-trips with string and int args", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "PerformAction",
+        typeName: "IMyService, AdvancedDemo, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        args: ["payload-data", 7],
+      };
+      const result = roundTripCall(call);
+      expect(result.methodName).toBe("PerformAction");
+      expect(result.args).toEqual(["payload-data", 7]);
+    });
+
+    it("round-trips with callContext", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Ping",
+        typeName: "IService",
+        callContext: "ctx-value",
+      };
+      const result = roundTripCall(call);
+      expect(result.callContext).toBe("ctx-value");
+    });
+
+    it("round-trips with callContext and args", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Ping",
+        typeName: "IService",
+        callContext: "ctx",
+        args: [true, 42n],
+      };
+      const result = roundTripCall(call);
+      expect(result.callContext).toBe("ctx");
+      expect(result.args).toEqual([true, 42n]);
+    });
+
+    it("round-trips fixture method_call.nrbf", () => {
+      const original = deserialize(readFileSync(join(fixturesDir, "method_call.nrbf"))) as NrbfMethodCall;
+      const result = roundTripCall(original);
+      expect(result.kind).toBe(original.kind);
+      expect(result.methodName).toBe(original.methodName);
+      expect(result.typeName).toBe(original.typeName);
+      expect(result.args).toEqual(original.args);
+      expect(result.callContext).toEqual(original.callContext);
+    });
+  });
+
+  describe("NrbfMethodReturn", () => {
+    function roundTripReturn(ret: NrbfMethodReturn): NrbfMethodReturn {
+      return deserialize(serialize(ret)) as NrbfMethodReturn;
+    }
+
+    it("round-trips with no return value (void)", () => {
+      const ret: NrbfMethodReturn = { kind: "MethodReturn" };
+      const result = roundTripReturn(ret);
+      expect(result.kind).toBe("MethodReturn");
+      expect(result.returnValue).toBeUndefined();
+      expect(result.args).toBeUndefined();
+      expect(result.callContext).toBeUndefined();
+    });
+
+    it("round-trips with a string return value", () => {
+      const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: "success" };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBe("success");
+    });
+
+    it("round-trips with a numeric return value", () => {
+      const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: 99 };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBe(99);
+    });
+
+    it("round-trips with null return value", () => {
+      const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: null };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBeNull();
+    });
+
+    it("round-trips with callContext", () => {
+      const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: 1, callContext: "ctx" };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBe(1);
+      expect(result.callContext).toBe("ctx");
+    });
+
+    it("round-trips fixture method_return.nrbf", () => {
+      const original = deserialize(readFileSync(join(fixturesDir, "method_return.nrbf"))) as NrbfMethodReturn;
+      const result = roundTripReturn(original);
+      expect(result.kind).toBe(original.kind);
+      expect(result.returnValue).toEqual(original.returnValue);
+      expect(result.callContext).toEqual(original.callContext);
+      expect(result.args).toEqual(original.args);
     });
   });
 });
