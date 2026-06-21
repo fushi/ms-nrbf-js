@@ -114,10 +114,11 @@ class Serializer {
       );
     }
 
+    // Assign rootId first so library IDs follow it, matching the .NET wire order.
+    const rootId = this.nextId++;
+
     // Pre-scan to collect and register all libraryNames before writing any records.
     this.collectLibraries(value, new Set());
-
-    const rootId = this.nextId++;
 
     // SerializationHeaderRecord
     this.w.writeByte(RecordTypeEnumeration.SerializedStreamHeader);
@@ -141,7 +142,7 @@ class Serializer {
 
   private writeHeader(): void {
     this.w.writeByte(RecordTypeEnumeration.SerializedStreamHeader);
-    this.w.writeInt32(1);  // rootId — unused for method call/return streams
+    this.w.writeInt32(-1); // rootId — no root object in method call/return streams
     this.w.writeInt32(-1); // headerId
     this.w.writeInt32(1);  // majorVersion
     this.w.writeInt32(0);  // minorVersion

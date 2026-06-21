@@ -230,6 +230,24 @@ describe("serialize", () => {
       expect(result.members["Score"]).toBeCloseTo(3.14);
       expect(result.members["Values"]).toEqual([10, 20, 30]);
     });
+
+    it("byte-exact round-trip of sample.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "sample.nrbf"));
+      const reserialized = serialize(deserialize(buf) as NrbfObject);
+      expect(reserialized).toEqual(buf);
+    });
+
+    it("byte-exact round-trip of method_call.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "method_call.nrbf"));
+      const reserialized = serialize(deserialize(buf) as NrbfMethodCall);
+      expect(reserialized).toEqual(buf);
+    });
+
+    it("byte-exact round-trip of method_return.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "method_return.nrbf"));
+      const reserialized = serialize(deserialize(buf) as NrbfMethodReturn);
+      expect(reserialized).toEqual(buf);
+    });
   });
 
   describe("NrbfMethodCall", () => {
