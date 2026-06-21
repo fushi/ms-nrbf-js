@@ -5,9 +5,14 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        project: true,
+        project: "./tsconfig.lint.json",
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+    rules: {
+      // Numeric enums in TypeScript 6 are transparent to `number`; comparing
+      // a raw byte read to an enum member is correct and intentional here.
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
     },
   },
   {

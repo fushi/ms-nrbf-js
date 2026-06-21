@@ -42,7 +42,7 @@ class Deserializer {
   }
 
   run(): NrbfRoot {
-    const firstTag = this.r.readByte();
+    const firstTag = this.r.readByte() as RecordTypeEnumeration;
     if (firstTag !== RecordTypeEnumeration.SerializedStreamHeader) {
       throw new Error(`Expected SerializationHeaderRecord (0) as first byte, got ${firstTag}`);
     }
