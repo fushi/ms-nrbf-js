@@ -14,6 +14,30 @@ function roundTrip(value: NrbfValue): NrbfValue {
 }
 
 describe("serialize", () => {
+  describe("circular references", () => {
+    it("handles mutual object references via MemberReference", () => {
+      const nodeA: NrbfObject = { typeName: "Node", libraryName: "Lib", members: { value: 1, peer: null } };
+      const nodeB: NrbfObject = { typeName: "Node", libraryName: "Lib", members: { value: 2, peer: nodeA } };
+      nodeA.members["peer"] = nodeB;
+
+      const result = deserialize(serialize(nodeA)) as NrbfObject;
+      expect(result.members["value"]).toBe(1);
+      const peer = result.members["peer"] as NrbfObject;
+      expect(peer.members["value"]).toBe(2);
+      // Back-reference resolves to the same deserialized object
+      expect(peer.members["peer"]).toBe(result);
+    });
+
+    it("handles self-reference", () => {
+      const node: NrbfObject = { typeName: "Node", members: { value: 42, self: null } };
+      node.members["self"] = node;
+
+      const result = deserialize(serialize(node)) as NrbfObject;
+      expect(result.members["value"]).toBe(42);
+      expect(result.members["self"]).toBe(result);
+    });
+  });
+
   it("throws for bare primitives as root", () => {
     expect(() => serialize(42 as unknown as NrbfValue)).toThrow(TypeError);
     expect(() => serialize(null)).toThrow(TypeError);
