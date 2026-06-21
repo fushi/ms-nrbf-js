@@ -1,5 +1,5 @@
 import { PrimitiveTypeEnumeration } from "./enums.js";
-import { DateTime, DateTimeKind, PrimitiveValue } from "./types.js";
+import { DateTime, PrimitiveValue } from "./types.js";
 
 export class BinaryReader {
   private offset = 0;
@@ -137,7 +137,7 @@ export class BinaryReader {
     const raw = this.readUInt64();
     return {
       ticks: raw & 0x3fffffffffffffffn,
-      kind: Number(raw >> 62n) as DateTimeKind,
+      kind: Number(raw >> 62n),
     };
   }
 

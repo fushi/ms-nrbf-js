@@ -39,9 +39,9 @@ describe("serialize", () => {
   });
 
   it("throws for bare primitives as root", () => {
-    expect(() => serialize(42 as unknown as NrbfValue)).toThrow(TypeError);
+    expect(() => serialize(42)).toThrow(TypeError);
     expect(() => serialize(null)).toThrow(TypeError);
-    expect(() => serialize(true as unknown as NrbfValue)).toThrow(TypeError);
+    expect(() => serialize(true)).toThrow(TypeError);
   });
 
   describe("string root", () => {
@@ -362,19 +362,19 @@ describe("serialize", () => {
 
     it("byte-exact round-trip of sample.nrbf", () => {
       const buf = readFileSync(join(fixturesDir, "sample.nrbf"));
-      const reserialized = serialize(deserialize(buf) as NrbfObject);
+      const reserialized = serialize(deserialize(buf));
       expect(reserialized).toEqual(buf);
     });
 
     it("byte-exact round-trip of method_call.nrbf", () => {
       const buf = readFileSync(join(fixturesDir, "method_call.nrbf"));
-      const reserialized = serialize(deserialize(buf) as NrbfMethodCall);
+      const reserialized = serialize(deserialize(buf));
       expect(reserialized).toEqual(buf);
     });
 
     it("byte-exact round-trip of method_return.nrbf", () => {
       const buf = readFileSync(join(fixturesDir, "method_return.nrbf"));
-      const reserialized = serialize(deserialize(buf) as NrbfMethodReturn);
+      const reserialized = serialize(deserialize(buf));
       expect(reserialized).toEqual(buf);
     });
   });

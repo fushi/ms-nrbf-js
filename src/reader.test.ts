@@ -94,12 +94,12 @@ describe("BinaryReader", () => {
     });
 
     it("reads string with 2-byte length prefix (length 128–16383)", () => {
-      const bytes = [0x80, 0x01, ...Array(128).fill(0x41)];
+      const bytes = [0x80, 0x01, ...Array<number>(128).fill(0x41)];
       expect(reader(...bytes).readLengthPrefixedString()).toBe("A".repeat(128));
     });
 
     it("reads string with 3-byte length prefix (length 16384+)", () => {
-      const bytes = [0x80, 0x80, 0x01, ...Array(16384).fill(0x42)];
+      const bytes = [0x80, 0x80, 0x01, ...Array<number>(16384).fill(0x42)];
       expect(reader(...bytes).readLengthPrefixedString()).toBe("B".repeat(16384));
     });
 

@@ -411,7 +411,7 @@ class Serializer {
     if (arr.length === 0 || !arr.every(isNrbfObject)) return undefined;
     const first = arr[0] as NrbfObject;
     const { typeName, libraryName } = first;
-    if (!arr.every((el) => (el as NrbfObject).typeName === typeName && (el as NrbfObject).libraryName === libraryName)) {
+    if (!arr.every((el) => (el).typeName === typeName && (el).libraryName === libraryName)) {
       return undefined;
     }
     if (libraryName) {
