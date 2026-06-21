@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { serialize } from "./serialize.js";
-import { PrimitiveTypeEnumeration } from "./enums.js";
+import { PrimitiveTypeEnumeration, RecordTypeEnumeration } from "./enums.js";
 import type { NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
@@ -214,6 +214,111 @@ describe("serialize", () => {
       const second = deserialize(serialize(first)) as NrbfObject;
       expect(second.memberTypes?.["Age"]).toBe(PrimitiveTypeEnumeration.Int32);
       expect(second.memberTypes?.["Score"]).toBe(PrimitiveTypeEnumeration.Double);
+    });
+  });
+
+  describe("BinaryArray(Single) for uniform class arrays", () => {
+    it("emits BinaryArray(Single, Class) for library class arrays", () => {
+      // Header(17) + BinaryLibrary("Lib")(9) + ClassWithMembersAndTypes header(30) = 56
+      // ClassWithMembersAndTypes header: type(1)+objectId(4)+name(1+9)+memberCount(4)+memberName(1+5)+typeInfo(1)+libraryId(4)=30
+      const obj: NrbfObject = {
+        typeName: "Container",
+        libraryName: "Lib",
+        members: {
+          items: [
+            { typeName: "Item", libraryName: "Lib", members: { n: 1 } },
+            { typeName: "Item", libraryName: "Lib", members: { n: 2 } },
+          ] as NrbfValue[],
+        },
+      };
+      const buf = serialize(obj);
+      expect(buf[56]).toBe(RecordTypeEnumeration.BinaryArray);
+    });
+
+    it("emits BinaryArray(Single, SystemClass) for system class arrays", () => {
+      // Header(17) + SystemClassWithMembersAndTypes header(28) = 45
+      // SystemClassWithMembersAndTypes: type(1)+objectId(4)+name(1+12)+memberCount(4)+memberName(1+5)+typeInfo(1)=29
+      // Wait: no libraryId for SystemClass, so: 1+4+(1+12)+4+(1+5)+1 = 29 bytes
+      // Total: 17 + 29 = 46
+      const obj: NrbfObject = {
+        typeName: "SysContainer",
+        members: {
+          items: [
+            { typeName: "SysItem", members: { v: 1 } },
+            { typeName: "SysItem", members: { v: 2 } },
+          ] as NrbfValue[],
+        },
+      };
+      const buf = serialize(obj);
+      // Header(17) + SystemClassWithMembersAndTypes: type(1)+objectId(4)+(1+12)+"SysContainer"+(4)+memberCount+(1+5)+"items"+typeInfo(1) = 46
+      expect(buf[46]).toBe(RecordTypeEnumeration.BinaryArray);
+    });
+
+    it("falls back to ArraySingleObject for mixed class types", () => {
+      const obj: NrbfObject = {
+        typeName: "Container",
+        libraryName: "Lib",
+        members: {
+          items: [
+            { typeName: "Foo", libraryName: "Lib", members: {} },
+            { typeName: "Bar", libraryName: "Lib", members: {} },
+          ] as NrbfValue[],
+        },
+      };
+      const buf = serialize(obj);
+      expect(buf[56]).toBe(RecordTypeEnumeration.ArraySingleObject);
+    });
+
+    it("falls back to ArraySingleObject when nulls are mixed in", () => {
+      const obj: NrbfObject = {
+        typeName: "Container",
+        libraryName: "Lib",
+        members: {
+          items: [
+            { typeName: "Item", libraryName: "Lib", members: {} },
+            null,
+          ] as NrbfValue[],
+        },
+      };
+      const buf = serialize(obj);
+      expect(buf[56]).toBe(RecordTypeEnumeration.ArraySingleObject);
+    });
+
+    it("round-trips library class array preserving element values", () => {
+      const obj: NrbfObject = {
+        typeName: "Container",
+        libraryName: "Lib",
+        members: {
+          items: [
+            { typeName: "Item", libraryName: "Lib", members: { n: 10 } },
+            { typeName: "Item", libraryName: "Lib", members: { n: 20 } },
+          ] as NrbfValue[],
+        },
+      };
+      const result = deserialize(serialize(obj)) as NrbfObject;
+      const items = result.members["items"] as NrbfObject[];
+      expect(items).toHaveLength(2);
+      expect(items[0]!.typeName).toBe("Item");
+      expect(items[0]!.libraryName).toBe("Lib");
+      expect(items[0]!.members["n"]).toBe(10);
+      expect(items[1]!.members["n"]).toBe(20);
+    });
+
+    it("round-trips system class array preserving element values", () => {
+      const obj: NrbfObject = {
+        typeName: "SysContainer",
+        members: {
+          items: [
+            { typeName: "SysItem", members: { v: 42 } },
+            { typeName: "SysItem", members: { v: 99 } },
+          ] as NrbfValue[],
+        },
+      };
+      const result = deserialize(serialize(obj)) as NrbfObject;
+      const items = result.members["items"] as NrbfObject[];
+      expect(items).toHaveLength(2);
+      expect(items[0]!.members["v"]).toBe(42);
+      expect(items[1]!.members["v"]).toBe(99);
     });
   });
 

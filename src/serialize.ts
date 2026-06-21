@@ -1,4 +1,5 @@
 import {
+  BinaryArrayTypeEnumeration,
   BinaryTypeEnumeration,
   MessageFlags,
   PrimitiveTypeEnumeration,
@@ -398,6 +399,27 @@ class Serializer {
   // Array records
   // ---------------------------------------------------------------------------
 
+  // If every element of `arr` is an NrbfObject of the same type, return the BinaryTypeEntry
+  // for that class type. Used to emit BinaryArray(Single, Class/SystemClass) instead of
+  // ArraySingleObject, preserving type info for .NET interop.
+  private uniformClassEntry(
+    arr: NrbfValue[],
+  ):
+    | { binaryType: BinaryTypeEnumeration.Class; classTypeInfo: { typeName: string; libraryId: number } }
+    | { binaryType: BinaryTypeEnumeration.SystemClass; className: string }
+    | undefined {
+    if (arr.length === 0 || !arr.every(isNrbfObject)) return undefined;
+    const first = arr[0] as NrbfObject;
+    const { typeName, libraryName } = first;
+    if (!arr.every((el) => (el as NrbfObject).typeName === typeName && (el as NrbfObject).libraryName === libraryName)) {
+      return undefined;
+    }
+    if (libraryName) {
+      return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName, libraryId: this.libraryIds.get(libraryName) ?? 0 } };
+    }
+    return { binaryType: BinaryTypeEnumeration.SystemClass, className: typeName };
+  }
+
   private writeArray(arr: NrbfValue[], objectId: number): void {
     const primType = uniformPrimitiveType(arr);
 
@@ -414,6 +436,25 @@ class Serializer {
       this.w.writeByte(RecordTypeEnumeration.ArraySingleString);
       this.w.writeInt32(objectId);
       this.w.writeInt32(arr.length);
+      for (const el of arr) this.writeAnyValue(el);
+      return;
+    }
+
+    const classEntry = this.uniformClassEntry(arr);
+    if (classEntry !== undefined) {
+      this.w.writeByte(RecordTypeEnumeration.BinaryArray);
+      this.w.writeInt32(objectId);
+      this.w.writeByte(BinaryArrayTypeEnumeration.Single);
+      this.w.writeInt32(1); // rank
+      this.w.writeInt32(arr.length); // lengths[0]
+      // no lowerBounds for Single
+      this.w.writeByte(classEntry.binaryType);
+      if (classEntry.binaryType === BinaryTypeEnumeration.Class) {
+        this.w.writeLengthPrefixedString(classEntry.classTypeInfo.typeName);
+        this.w.writeInt32(classEntry.classTypeInfo.libraryId);
+      } else {
+        this.w.writeLengthPrefixedString(classEntry.className);
+      }
       for (const el of arr) this.writeAnyValue(el);
       return;
     }
