@@ -234,6 +234,57 @@ describe("deserialize", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // readRecord edge cases (record types encountered at top-level stream loop)
+  // ---------------------------------------------------------------------------
+
+  describe("readRecord edge cases", () => {
+    it("handles ObjectNullMultiple256 at top level (reads and discards)", () => {
+      const stream = buf(
+        header(1),
+        [0x0d, 0x02],                         // ObjectNullMultiple256, nullCount=2
+        [0x06, ...i32(1), ...lps("ok")],      // BinaryObjectString — the actual root
+        END,
+      );
+      expect(deserialize(stream)).toBe("ok");
+    });
+
+    it("handles ObjectNullMultiple at top level (reads and discards)", () => {
+      const stream = buf(
+        header(1),
+        [0x0e, ...i32(300)],                  // ObjectNullMultiple, nullCount=300
+        [0x06, ...i32(1), ...lps("ok")],
+        END,
+      );
+      expect(deserialize(stream)).toBe("ok");
+    });
+
+    it("throws on an unhandled record type", () => {
+      const stream = buf(header(1), [99]);
+      expect(() => deserialize(stream)).toThrow(/Unhandled record type/);
+    });
+
+    it("handles a MemberReference at top level when target is already registered", () => {
+      const stream = buf(
+        header(1),
+        [0x06, ...i32(1), ...lps("hello")],  // BinaryObjectString id=1 (root)
+        [0x09, ...i32(1)],                    // MemberReference to id=1 (top-level, return discarded)
+        END,
+      );
+      expect(deserialize(stream)).toBe("hello");
+    });
+
+    it("throws when a top-level MemberReference targets an unknown objectId", () => {
+      const stream = buf(
+        header(1),
+        [0x06, ...i32(1), ...lps("hello")],  // BinaryObjectString id=1
+        [0x09, ...i32(99)],                   // MemberReference to id=99 (not registered)
+        END,
+      );
+      expect(() => deserialize(stream)).toThrow(/objectId=99/);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Real binary fixtures
   // ---------------------------------------------------------------------------
 

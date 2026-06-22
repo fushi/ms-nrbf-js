@@ -379,10 +379,39 @@ describe("serialize", () => {
     });
   });
 
+  describe("ArraySingleObject with primitive elements", () => {
+    it("round-trips a mixed primitive+null array", () => {
+      expect(roundTrip([42, null])).toEqual([42, null]);
+    });
+
+    it("round-trips a mixed boolean+null+string array", () => {
+      expect(roundTrip([true, null, "x"])).toEqual([true, null, "x"]);
+    });
+  });
+
+  describe("string-array class member", () => {
+    it("round-trips a class with a string array member", () => {
+      const obj: NrbfObject = { typeName: "T", members: { tags: ["a", "b", "c"] } };
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["tags"]).toEqual(["a", "b", "c"]);
+    });
+  });
+
   describe("NrbfMethodCall", () => {
     function roundTripCall(call: NrbfMethodCall): NrbfMethodCall {
       return deserialize(serialize(call)) as NrbfMethodCall;
     }
+
+    it("throws when args contain an NrbfObject (not encodable as ValueWithCode)", () => {
+      expect(() =>
+        serialize({
+          kind: "MethodCall",
+          methodName: "M",
+          typeName: "T",
+          args: [{ typeName: "Inner", members: {} }],
+        }),
+      ).toThrow(TypeError);
+    });
 
     it("round-trips methodName and typeName", () => {
       const call: NrbfMethodCall = { kind: "MethodCall", methodName: "DoWork", typeName: "IService" };
