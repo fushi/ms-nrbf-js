@@ -168,5 +168,63 @@ describe("BinaryReader", () => {
         reader(0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00).readPrimitive(PrimitiveTypeEnumeration.UInt64),
       ).toBe(1n);
     });
+
+    it("dispatches Byte", () => {
+      expect(reader(0xff).readPrimitive(PrimitiveTypeEnumeration.Byte)).toBe(255);
+    });
+
+    it("dispatches Char", () => {
+      expect(reader(0x41).readPrimitive(PrimitiveTypeEnumeration.Char)).toBe("A");
+    });
+
+    it("dispatches Decimal to string", () => {
+      expect(reader(0x05, 0x31, 0x32, 0x2e, 0x33, 0x34).readPrimitive(PrimitiveTypeEnumeration.Decimal)).toBe("12.34");
+    });
+
+    it("dispatches Double", () => {
+      const buf = Buffer.allocUnsafe(8);
+      buf.writeDoubleLE(Math.PI, 0);
+      expect(new BinaryReader(buf).readPrimitive(PrimitiveTypeEnumeration.Double)).toBeCloseTo(Math.PI);
+    });
+
+    it("dispatches Int16", () => {
+      expect(reader(0x00, 0x80).readPrimitive(PrimitiveTypeEnumeration.Int16)).toBe(-32768);
+    });
+
+    it("dispatches Int64", () => {
+      expect(reader(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff).readPrimitive(PrimitiveTypeEnumeration.Int64)).toBe(-1n);
+    });
+
+    it("dispatches SByte", () => {
+      expect(reader(0xff).readPrimitive(PrimitiveTypeEnumeration.SByte)).toBe(-1);
+    });
+
+    it("dispatches Single", () => {
+      const buf = Buffer.allocUnsafe(4);
+      buf.writeFloatLE(1.5, 0);
+      expect(new BinaryReader(buf).readPrimitive(PrimitiveTypeEnumeration.Single)).toBeCloseTo(1.5);
+    });
+
+    it("dispatches TimeSpan to bigint ticks", () => {
+      expect(reader(0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00).readPrimitive(PrimitiveTypeEnumeration.TimeSpan)).toBe(1n);
+    });
+
+    it("dispatches DateTime", () => {
+      // kind=UTC(1) packed as 1n << 62n → ticks=0, kind=1
+      const dt = reader(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40).readPrimitive(PrimitiveTypeEnumeration.DateTime);
+      expect(dt).toMatchObject({ ticks: 0n, kind: 1 });
+    });
+
+    it("dispatches UInt16", () => {
+      expect(reader(0xff, 0xff).readPrimitive(PrimitiveTypeEnumeration.UInt16)).toBe(65535);
+    });
+
+    it("dispatches UInt32", () => {
+      expect(reader(0xff, 0xff, 0xff, 0xff).readPrimitive(PrimitiveTypeEnumeration.UInt32)).toBe(4_294_967_295);
+    });
+
+    it("unknown type → RangeError", () => {
+      expect(() => reader().readPrimitive(99 as PrimitiveTypeEnumeration)).toThrow(RangeError);
+    });
   });
 });
