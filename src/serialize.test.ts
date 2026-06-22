@@ -502,6 +502,13 @@ describe("serialize", () => {
       expect(result.returnValue).toBeNull();
     });
 
+    it("round-trips with args", () => {
+      const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: "done", args: [1, "extra"] };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBe("done");
+      expect(result.args).toEqual([1, "extra"]);
+    });
+
     it("round-trips with callContext", () => {
       const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: 1, callContext: "ctx" };
       const result = roundTripReturn(ret);

@@ -43,6 +43,23 @@ describe("deserialize", () => {
     expect(() => deserialize(Buffer.from([0x0b]))).toThrow();
   });
 
+  it("throws when the root objectId is never defined in the stream", () => {
+    // rootId=5, but only id=1 is defined — objects.get(5) is undefined
+    const stream = buf(header(5), [0x06, ...i32(1), ...lps("x")], END);
+    expect(() => deserialize(stream)).toThrow(/Root object/);
+  });
+
+  it("throws on an unresolved forward reference after stream end", () => {
+    // Array element references id=99 which is never defined → fixup can't resolve
+    const stream = buf(
+      header(1),
+      [0x10, ...i32(1), ...i32(1)],  // ArraySingleObject(id=1, length=1)
+      [0x09, ...i32(99)],             // MemberReference to id=99 — never defined
+      END,
+    );
+    expect(() => deserialize(stream)).toThrow(/Unresolved forward reference/);
+  });
+
   describe("BinaryObjectString as root", () => {
     it("deserializes a string value", () => {
       const stream = buf(header(1), [0x06, ...i32(1), ...lps("hello")], END);
@@ -154,6 +171,39 @@ describe("deserialize", () => {
   });
 
   describe("ClassWithId", () => {
+    it("uses readMembersUntyped when ClassWithId follows an untyped class (no memberTypeInfo)", () => {
+      // SystemClassWithMembers stores metadata without memberTypeInfo; ClassWithId must use readMembersUntyped
+      const stream = buf(
+        header(2),
+        [0x02, ...i32(1), ...lps("Widget"), ...i32(1), ...lps("val")],  // SystemClassWithMembers(id=1)
+        [0x0a],                                                           // ObjectNull for "val"
+        [0x01, ...i32(2), ...i32(1)],                                    // ClassWithId(id=2, metadataId=1)
+        [0x0a],                                                           // ObjectNull for "val"
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject;
+      expect(result.typeName).toBe("Widget");
+      expect(result.members["val"]).toBeNull();
+    });
+
+    it("omits memberTypes when ClassWithId follows a class with no primitive members", () => {
+      // ClassWithMembersAndTypes has only a String member → extractMemberTypes returns undefined
+      const stream = buf(
+        header(2),
+        [0x0c, ...i32(5), ...lps("Lib")],
+        [0x05, ...i32(1), ...lps("Box"), ...i32(1), ...lps("label"), 0x01, ...i32(5)],
+        [0x06, ...i32(3), ...lps("first")],   // BinaryObjectString for "label" (first instance)
+        [0x01, ...i32(2), ...i32(1)],          // ClassWithId(id=2, metadataId=1)
+        [0x06, ...i32(4), ...lps("second")],   // BinaryObjectString for "label" (second instance)
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject;
+      expect(result.typeName).toBe("Box");
+      expect(result.libraryName).toBe("Lib");
+      expect(result.memberTypes).toBeUndefined();
+      expect(result.members["label"]).toBe("second");
+    });
+
     it("reuses class metadata from a prior record", () => {
       const stream = buf(
         header(2),
@@ -169,6 +219,33 @@ describe("deserialize", () => {
       expect(result.typeName).toBe("Point");
       expect(result.members["x"]).toBe(3);
       expect(result.members["y"]).toBe(4);
+    });
+  });
+
+  describe("array element MemberReferences", () => {
+    it("resolves a forward MemberReference in an array element via fixup", () => {
+      // Array(id=1) has one element: MemberRef to id=2, which is defined AFTER the array
+      const stream = buf(
+        header(1),
+        [0x10, ...i32(1), ...i32(1)],          // ArraySingleObject(id=1, length=1)
+        [0x09, ...i32(2)],                      // MemberReference(idRef=2) — forward ref
+        [0x06, ...i32(2), ...lps("forward")],   // BinaryObjectString(id=2) — defined later
+        END,
+      );
+      expect(deserialize(stream)).toEqual(["forward"]);
+    });
+
+    it("resolves a back MemberReference in an array element directly", () => {
+      // Shared string is defined before the array; array elements reference it by id
+      const stream = buf(
+        header(1),
+        [0x06, ...i32(3), ...lps("shared")],   // BinaryObjectString(id=3) — defined first
+        [0x10, ...i32(1), ...i32(2)],           // ArraySingleObject(id=1, length=2)
+        [0x09, ...i32(3)],                      // MemberReference(idRef=3) — back ref
+        [0x09, ...i32(3)],                      // MemberReference(idRef=3) — back ref
+        END,
+      );
+      expect(deserialize(stream)).toEqual(["shared", "shared"]);
     });
   });
 
