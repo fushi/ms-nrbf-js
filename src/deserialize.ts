@@ -434,7 +434,11 @@ class Deserializer {
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
     if (messageEnum & MessageFlags.ArgsInline) {
       result.args = this.readArrayOfValueWithCode();
-    } else if ((messageEnum & MessageFlags.ArgsIsArray) || (messageEnum & MessageFlags.ArgsInArray)) {
+    } else if (
+      (messageEnum & MessageFlags.ArgsIsArray) ||
+      (messageEnum & MessageFlags.ArgsInArray) ||
+      (messageEnum & MessageFlags.ContextInArray)
+    ) {
       this.readCallArray(messageEnum, result);
     }
     return result;
@@ -447,7 +451,11 @@ class Deserializer {
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
     if (messageEnum & MessageFlags.ArgsInline) {
       result.args = this.readArrayOfValueWithCode();
-    } else if ((messageEnum & MessageFlags.ReturnValueInArray) || (messageEnum & MessageFlags.ArgsInArray)) {
+    } else if (
+      (messageEnum & MessageFlags.ReturnValueInArray) ||
+      (messageEnum & MessageFlags.ArgsInArray) ||
+      (messageEnum & MessageFlags.ContextInArray)
+    ) {
       this.readCallArray(messageEnum, result);
     }
     return result;
@@ -473,14 +481,33 @@ class Deserializer {
 
     if (result.kind === "MethodCall") {
       if (messageEnum & MessageFlags.ArgsIsArray) {
-        // Each element IS one argument; shared array ref means forward-ref fixups propagate automatically.
-        for (let i = 0; i < length; i++) {
-          const idx = i;
-          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        // With ArgsIsArray, each arg is a direct element. If ContextInArray is also set,
+        // the context object follows the args as the last element.
+        const hasCtx = !!(messageEnum & MessageFlags.ContextInArray);
+        const argCount = hasCtx ? length - 1 : length;
+        if (hasCtx) {
+          // Need a separate array so the context element is not included in result.args.
+          const argSlice: NrbfValue[] = [];
+          for (let i = 0; i < argCount; i++) {
+            const idx = i;
+            const val = this.readReferenceableValue((v) => { arr[idx] = v; argSlice[idx] = v; });
+            arr.push(val);
+            argSlice.push(val);
+          }
+          result.args = argSlice;
+          const ctxIdx = arr.length;
+          const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
+          arr.push(ctx);
+          result.callContext = ctx as string | NrbfObject;
+        } else {
+          for (let i = 0; i < argCount; i++) {
+            const idx = i;
+            arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+          }
+          result.args = arr;
         }
-        result.args = arr;
-      } else {
-        // ArgsInArray: element 0 is the nested args sub-array.
+      } else if (messageEnum & MessageFlags.ArgsInArray) {
+        // Element 0 is the nested args sub-array.
         {
           const idx = 0;
           const val = this.readReferenceableValue((v) => {
@@ -490,25 +517,38 @@ class Deserializer {
           arr.push(val);
           if (Array.isArray(val)) result.args = val;
         }
-        for (let i = 1; i < length; i++) {
-          const idx = i;
+        // Element 1 (if ContextInArray) is the call context object.
+        if (messageEnum & MessageFlags.ContextInArray) {
+          const ctxIdx = arr.length;
+          const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
+          arr.push(ctx);
+          result.callContext = ctx as string | NrbfObject;
+        }
+        while (arr.length < length) {
+          const idx = arr.length;
+          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        }
+      } else {
+        // ContextInArray only — element 0 is the call context object.
+        const ctxIdx = arr.length;
+        const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
+        arr.push(ctx);
+        result.callContext = ctx as string | NrbfObject;
+        while (arr.length < length) {
+          const idx = arr.length;
           arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
         }
       }
     } else {
-      // MethodReturn: items in order — ReturnValue, OutputArguments (see §2.2.3.4).
-      let arrIdx = 0;
+      // MethodReturn: items in order per §2.2.3.4 — ReturnValue, OutputArguments, Exception, CallContext, Properties.
       if (messageEnum & MessageFlags.ReturnValueInArray) {
-        const idx = arrIdx++;
-        const val = this.readReferenceableValue((v) => {
-          arr[idx] = v;
-          result.returnValue = v;
-        });
+        const idx = arr.length;
+        const val = this.readReferenceableValue((v) => { arr[idx] = v; result.returnValue = v; });
         arr.push(val);
         result.returnValue = val;
       }
       if (messageEnum & MessageFlags.ArgsInArray) {
-        const idx = arrIdx++;
+        const idx = arr.length;
         const val = this.readReferenceableValue((v) => {
           arr[idx] = v;
           if (Array.isArray(v)) result.args = v;
@@ -516,7 +556,18 @@ class Deserializer {
         arr.push(val);
         if (Array.isArray(val)) result.args = val;
       }
-      // Consume any remaining elements (exception, callContext, properties) without exposing them.
+      // ExceptionInArray (item 3) — consume without exposing.
+      if (messageEnum & MessageFlags.ExceptionInArray) {
+        const idx = arr.length;
+        arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+      }
+      if (messageEnum & MessageFlags.ContextInArray) {
+        const ctxIdx = arr.length;
+        const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
+        arr.push(ctx);
+        result.callContext = ctx as string | NrbfObject;
+      }
+      // Consume remaining elements (PropertiesInArray, etc.).
       while (arr.length < length) {
         const idx = arr.length;
         arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));

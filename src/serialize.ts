@@ -152,23 +152,28 @@ class Serializer {
   private runMethodCall(call: NrbfMethodCall): Buffer {
     const hasComplexArgs =
       call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfObject(v));
+    const ctxIsObject = call.callContext !== undefined && isNrbfObject(call.callContext);
+    const needsCallArray = hasComplexArgs || ctxIsObject;
 
-    if (hasComplexArgs && call.args) {
+    if (needsCallArray) {
       const seen = new Set<object>();
-      for (const arg of call.args) this.collectLibraries(arg as NrbfValue, seen);
+      if (call.args) for (const arg of call.args) this.collectLibraries(arg as NrbfValue, seen);
+      if (ctxIsObject) this.collectLibraries(call.callContext as NrbfObject, seen);
     }
 
     let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
-    if (call.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
+    if (call.callContext !== undefined) {
+      flags = (flags & ~MessageFlags.NoContext) | (ctxIsObject ? MessageFlags.ContextInArray : MessageFlags.ContextInline);
+    }
     if (call.args !== undefined) {
       flags &= ~MessageFlags.NoArgs;
       flags |= hasComplexArgs ? MessageFlags.ArgsIsArray : MessageFlags.ArgsInline;
     }
 
-    const callArrayId = hasComplexArgs ? this.nextId++ : undefined;
+    const callArrayId = needsCallArray ? this.nextId++ : undefined;
     this.writeHeader(callArrayId ?? -1);
 
-    if (hasComplexArgs) {
+    if (needsCallArray) {
       for (const [name, id] of this.libraryIds) {
         this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
         this.w.writeInt32(id);
@@ -180,14 +185,22 @@ class Serializer {
     this.w.writeInt32(flags);
     this.writeStringValueWithCode(call.methodName);
     this.writeStringValueWithCode(call.typeName);
-    if (call.callContext !== undefined) this.writeStringValueWithCode(call.callContext);
+    if (call.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(call.callContext as string);
     if (!hasComplexArgs && call.args !== undefined) this.writeArrayOfValueWithCode(call.args);
 
-    if (hasComplexArgs && call.args !== undefined && callArrayId !== undefined) {
+    if (needsCallArray && callArrayId !== undefined) {
+      // ArgsIsArray: each arg is a direct element, followed by context (if ContextInArray).
+      // ArgsInArray: element 0 = nested args array, element 1 = context (if ContextInArray).
+      // ContextInArray only: element 0 = context object.
+      const elementCount =
+        (hasComplexArgs ? call.args!.length : 0) + (ctxIsObject ? 1 : 0);
       this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
       this.w.writeInt32(callArrayId);
-      this.w.writeInt32(call.args.length);
-      for (const arg of call.args) this.writeAnyValue(arg as NrbfValue);
+      this.w.writeInt32(elementCount);
+      if (hasComplexArgs && call.args !== undefined) {
+        for (const arg of call.args) this.writeAnyValue(arg as NrbfValue);
+      }
+      if (ctxIsObject) this.writeAnyValue(call.callContext as NrbfObject);
     }
 
     this.w.writeByte(RecordTypeEnumeration.MessageEnd);
@@ -199,19 +212,23 @@ class Serializer {
       ret.returnValue !== undefined && (Array.isArray(ret.returnValue) || isNrbfObject(ret.returnValue));
     const hasComplexArgs =
       ret.args !== undefined && ret.args.some((v) => Array.isArray(v) || isNrbfObject(v));
-    const needsCallArray = hasComplexReturn || hasComplexArgs;
+    const ctxIsObject = ret.callContext !== undefined && isNrbfObject(ret.callContext);
+    const needsCallArray = hasComplexReturn || hasComplexArgs || ctxIsObject;
 
     if (needsCallArray) {
       const seen = new Set<object>();
       if (ret.returnValue !== undefined) this.collectLibraries(ret.returnValue as NrbfValue, seen);
       if (ret.args !== undefined) for (const arg of ret.args) this.collectLibraries(arg as NrbfValue, seen);
+      if (ctxIsObject) this.collectLibraries(ret.callContext as NrbfObject, seen);
     }
 
     let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
     flags |= ret.returnValue !== undefined
       ? hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline
       : MessageFlags.ReturnValueVoid;
-    if (ret.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
+    if (ret.callContext !== undefined) {
+      flags = (flags & ~MessageFlags.NoContext) | (ctxIsObject ? MessageFlags.ContextInArray : MessageFlags.ContextInline);
+    }
     if (ret.args !== undefined) {
       flags &= ~MessageFlags.NoArgs;
       flags |= hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
@@ -231,16 +248,19 @@ class Serializer {
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
     this.w.writeInt32(flags);
     if (ret.returnValue !== undefined && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
-    if (ret.callContext !== undefined) this.writeStringValueWithCode(ret.callContext);
+    if (ret.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(ret.callContext as string);
     if (ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args);
 
     if (needsCallArray && callArrayId !== undefined) {
-      const elementCount = (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0);
+      // MethodReturnCallArray order: ReturnValue, OutputArguments, (Exception skipped), CallContext.
+      const elementCount =
+        (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0) + (ctxIsObject ? 1 : 0);
       this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
       this.w.writeInt32(callArrayId);
       this.w.writeInt32(elementCount);
       if (hasComplexReturn && ret.returnValue !== undefined) this.writeAnyValue(ret.returnValue as NrbfValue);
       if (hasComplexArgs && ret.args !== undefined) this.writeAnyValue(ret.args);
+      if (ctxIsObject) this.writeAnyValue(ret.callContext as NrbfObject);
     }
 
     this.w.writeByte(RecordTypeEnumeration.MessageEnd);

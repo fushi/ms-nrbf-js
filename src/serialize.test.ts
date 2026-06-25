@@ -471,6 +471,30 @@ describe("serialize", () => {
       expect(result.callContext).toBe("ctx-value");
     });
 
+    it("round-trips NrbfObject callContext alone (ContextInArray path)", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "call-42" } },
+      };
+      const result = roundTripCall(call);
+      expect(result.callContext).toMatchObject({ typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", members: { id: "call-42" } });
+    });
+
+    it("round-trips NrbfObject args and NrbfObject callContext together", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: [{ typeName: "Arg", members: { x: 1 } }],
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "ctx" } },
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ typeName: "Arg", members: { x: 1 } }]);
+      expect(result.callContext).toMatchObject({ typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", members: { id: "ctx" } });
+    });
+
     it("round-trips with callContext and args", () => {
       const call: NrbfMethodCall = {
         kind: "MethodCall",
@@ -539,6 +563,26 @@ describe("serialize", () => {
       const result = roundTripReturn(ret);
       expect(result.returnValue).toBe(1);
       expect(result.callContext).toBe("ctx");
+    });
+
+    it("round-trips NrbfObject callContext alone (ContextInArray path)", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "r-42" } },
+      };
+      const result = roundTripReturn(ret);
+      expect(result.callContext).toMatchObject({ typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", members: { id: "r-42" } });
+    });
+
+    it("round-trips complex return value and NrbfObject callContext together", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: { typeName: "Result", members: { code: 0 } },
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "r-ctx" } },
+      };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toMatchObject({ typeName: "Result", members: { code: 0 } });
+      expect(result.callContext).toMatchObject({ members: { id: "r-ctx" } });
     });
 
     it("round-trips fixture method_return.nrbf", () => {

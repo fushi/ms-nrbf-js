@@ -79,14 +79,14 @@ export interface NrbfMethodCall {
   kind: "MethodCall";
   methodName: string;
   typeName: string;
-  callContext?: string;
+  callContext?: string | NrbfObject;
   args?: NrbfValue[];
 }
 
 export interface NrbfMethodReturn {
   kind: "MethodReturn";
   returnValue?: NrbfValue;
-  callContext?: string;
+  callContext?: string | NrbfObject;
   args?: NrbfValue[];
 }
 
