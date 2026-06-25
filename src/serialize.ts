@@ -208,31 +208,39 @@ class Serializer {
   }
 
   private runMethodReturn(ret: NrbfMethodReturn): Buffer {
-    const hasComplexReturn =
+    const hasException = ret.exception !== undefined;
+    // ExceptionInArray is exclusive with Return and Args categories per spec §2.2.1.1.
+    const hasComplexReturn = !hasException &&
       ret.returnValue !== undefined && (Array.isArray(ret.returnValue) || isNrbfObject(ret.returnValue));
-    const hasComplexArgs =
+    const hasComplexArgs = !hasException &&
       ret.args !== undefined && ret.args.some((v) => Array.isArray(v) || isNrbfObject(v));
     const ctxIsObject = ret.callContext !== undefined && isNrbfObject(ret.callContext);
-    const needsCallArray = hasComplexReturn || hasComplexArgs || ctxIsObject;
+    const needsCallArray = hasComplexReturn || hasComplexArgs || hasException || ctxIsObject;
 
     if (needsCallArray) {
       const seen = new Set<object>();
-      if (ret.returnValue !== undefined) this.collectLibraries(ret.returnValue as NrbfValue, seen);
-      if (ret.args !== undefined) for (const arg of ret.args) this.collectLibraries(arg as NrbfValue, seen);
+      if (!hasException) {
+        if (ret.returnValue !== undefined) this.collectLibraries(ret.returnValue as NrbfValue, seen);
+        if (ret.args !== undefined) for (const arg of ret.args) this.collectLibraries(arg as NrbfValue, seen);
+      }
+      if (hasException) this.collectLibraries(ret.exception!, seen);
       if (ctxIsObject) this.collectLibraries(ret.callContext as NrbfObject, seen);
     }
 
-    let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
-    flags |= ret.returnValue !== undefined
-      ? hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline
-      : MessageFlags.ReturnValueVoid;
-    if (ret.callContext !== undefined) {
-      flags = (flags & ~MessageFlags.NoContext) | (ctxIsObject ? MessageFlags.ContextInArray : MessageFlags.ContextInline);
+    // ExceptionInArray is mutually exclusive with Arg and Return flag categories.
+    let flags = 0;
+    if (hasException) {
+      flags |= MessageFlags.ExceptionInArray;
+    } else {
+      flags |= ret.args === undefined ? MessageFlags.NoArgs
+        : hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
+      flags |= ret.returnValue !== undefined
+        ? hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline
+        : MessageFlags.ReturnValueVoid;
     }
-    if (ret.args !== undefined) {
-      flags &= ~MessageFlags.NoArgs;
-      flags |= hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
-    }
+    flags |= ret.callContext !== undefined
+      ? ctxIsObject ? MessageFlags.ContextInArray : MessageFlags.ContextInline
+      : MessageFlags.NoContext;
 
     const callArrayId = needsCallArray ? this.nextId++ : undefined;
     this.writeHeader(callArrayId ?? -1);
@@ -247,19 +255,20 @@ class Serializer {
 
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
     this.w.writeInt32(flags);
-    if (ret.returnValue !== undefined && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
+    if (!hasException && ret.returnValue !== undefined && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
     if (ret.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(ret.callContext as string);
-    if (ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args);
+    if (!hasException && ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args);
 
     if (needsCallArray && callArrayId !== undefined) {
-      // MethodReturnCallArray order: ReturnValue, OutputArguments, (Exception skipped), CallContext.
+      // MethodReturnCallArray order: ReturnValue, OutputArguments, Exception, CallContext (§2.2.3.4).
       const elementCount =
-        (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0) + (ctxIsObject ? 1 : 0);
+        (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0) + (hasException ? 1 : 0) + (ctxIsObject ? 1 : 0);
       this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
       this.w.writeInt32(callArrayId);
       this.w.writeInt32(elementCount);
       if (hasComplexReturn && ret.returnValue !== undefined) this.writeAnyValue(ret.returnValue as NrbfValue);
       if (hasComplexArgs && ret.args !== undefined) this.writeAnyValue(ret.args);
+      if (hasException) this.writeAnyValue(ret.exception!);
       if (ctxIsObject) this.writeAnyValue(ret.callContext as NrbfObject);
     }
 

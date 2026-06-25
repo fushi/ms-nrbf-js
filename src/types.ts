@@ -86,6 +86,7 @@ export interface NrbfMethodCall {
 export interface NrbfMethodReturn {
   kind: "MethodReturn";
   returnValue?: NrbfValue;
+  exception?: NrbfObject;
   callContext?: string | NrbfObject;
   args?: NrbfValue[];
 }

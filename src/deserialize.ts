@@ -454,6 +454,7 @@ class Deserializer {
     } else if (
       (messageEnum & MessageFlags.ReturnValueInArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
+      (messageEnum & MessageFlags.ExceptionInArray) ||
       (messageEnum & MessageFlags.ContextInArray)
     ) {
       this.readCallArray(messageEnum, result);
@@ -556,10 +557,11 @@ class Deserializer {
         arr.push(val);
         if (Array.isArray(val)) result.args = val;
       }
-      // ExceptionInArray (item 3) — consume without exposing.
       if (messageEnum & MessageFlags.ExceptionInArray) {
         const idx = arr.length;
-        arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        const val = this.readReferenceableValue((v) => { arr[idx] = v; result.exception = v as NrbfObject; });
+        arr.push(val);
+        result.exception = val as NrbfObject;
       }
       if (messageEnum & MessageFlags.ContextInArray) {
         const ctxIdx = arr.length;

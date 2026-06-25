@@ -633,5 +633,38 @@ describe("serialize", () => {
       expect(result.returnValue).toMatchObject({ typeName: "R", members: { n: 1 } });
       expect(result.args).toMatchObject([{ typeName: "A", members: { n: 2 } }]);
     });
+
+    it("round-trips exception alone (ExceptionInArray path)", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        exception: { typeName: "System.Exception", libraryName: "mscorlib", members: { _message: "boom" } },
+      };
+      const result = roundTripReturn(ret);
+      expect(result.exception).toMatchObject({ typeName: "System.Exception", members: { _message: "boom" } });
+      expect(result.returnValue).toBeUndefined();
+      expect(result.args).toBeUndefined();
+    });
+
+    it("round-trips exception with NrbfObject callContext", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        exception: { typeName: "System.InvalidOperationException", libraryName: "mscorlib", members: { _message: "invalid" } },
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "ex-ctx" } },
+      };
+      const result = roundTripReturn(ret);
+      expect(result.exception).toMatchObject({ typeName: "System.InvalidOperationException", members: { _message: "invalid" } });
+      expect(result.callContext).toMatchObject({ members: { id: "ex-ctx" } });
+    });
+
+    it("round-trips exception with string callContext", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        exception: { typeName: "System.Exception", libraryName: "mscorlib", members: { _message: "oops" } },
+        callContext: "call-123",
+      };
+      const result = roundTripReturn(ret);
+      expect(result.exception).toMatchObject({ typeName: "System.Exception", members: { _message: "oops" } });
+      expect(result.callContext).toBe("call-123");
+    });
   });
 });
