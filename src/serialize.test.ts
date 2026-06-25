@@ -402,15 +402,40 @@ describe("serialize", () => {
       return deserialize(serialize(call)) as NrbfMethodCall;
     }
 
-    it("throws when args contain an NrbfObject (not encodable as ValueWithCode)", () => {
-      expect(() =>
-        serialize({
-          kind: "MethodCall",
-          methodName: "M",
-          typeName: "T",
-          args: [{ typeName: "Inner", members: {} }],
-        }),
-      ).toThrow(TypeError);
+    it("round-trips args containing an NrbfObject (ArgsIsArray path)", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: [{ typeName: "Inner", members: { x: 1 } }],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ typeName: "Inner", members: { x: 1 } }]);
+    });
+
+    it("round-trips mixed primitive and NrbfObject args", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Process",
+        typeName: "IService",
+        args: [42, "text", { typeName: "Payload", members: { value: true } }],
+      };
+      const result = roundTripCall(call);
+      expect(result.methodName).toBe("Process");
+      expect(result.args?.[0]).toBe(42);
+      expect(result.args?.[1]).toBe("text");
+      expect(result.args?.[2]).toMatchObject({ typeName: "Payload", members: { value: true } });
+    });
+
+    it("round-trips NrbfObject args with a library name", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Send",
+        typeName: "IService",
+        args: [{ typeName: "Msg", libraryName: "MyLib, Version=1.0.0.0", members: { id: 7 } }],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ typeName: "Msg", libraryName: "MyLib, Version=1.0.0.0", members: { id: 7 } }]);
     });
 
     it("round-trips methodName and typeName", () => {
@@ -523,6 +548,46 @@ describe("serialize", () => {
       expect(result.returnValue).toEqual(original.returnValue);
       expect(result.callContext).toEqual(original.callContext);
       expect(result.args).toEqual(original.args);
+    });
+
+    it("round-trips NrbfObject return value (ReturnValueInArray path)", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: { typeName: "Result", members: { code: 0, message: "ok" } },
+      };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toMatchObject({ typeName: "Result", members: { code: 0, message: "ok" } });
+    });
+
+    it("round-trips NrbfObject return value with a library name", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: { typeName: "Resp", libraryName: "Svc, Version=2.0.0.0", members: { status: 200 } },
+      };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toMatchObject({ typeName: "Resp", libraryName: "Svc, Version=2.0.0.0", members: { status: 200 } });
+    });
+
+    it("round-trips complex args in MethodReturn (ArgsInArray path)", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: "done",
+        args: [{ typeName: "OutParam", members: { val: 99 } }],
+      };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBe("done");
+      expect(result.args).toMatchObject([{ typeName: "OutParam", members: { val: 99 } }]);
+    });
+
+    it("round-trips complex return value and complex args together", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: { typeName: "R", members: { n: 1 } },
+        args: [{ typeName: "A", members: { n: 2 } }],
+      };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toMatchObject({ typeName: "R", members: { n: 1 } });
+      expect(result.args).toMatchObject([{ typeName: "A", members: { n: 2 } }]);
     });
   });
 });

@@ -432,7 +432,11 @@ class Deserializer {
 
     const result: NrbfMethodCall = { kind: "MethodCall", methodName, typeName };
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
-    if (messageEnum & MessageFlags.ArgsInline) result.args = this.readArrayOfValueWithCode();
+    if (messageEnum & MessageFlags.ArgsInline) {
+      result.args = this.readArrayOfValueWithCode();
+    } else if ((messageEnum & MessageFlags.ArgsIsArray) || (messageEnum & MessageFlags.ArgsInArray)) {
+      this.readCallArray(messageEnum, result);
+    }
     return result;
   }
 
@@ -441,8 +445,83 @@ class Deserializer {
     const result: NrbfMethodReturn = { kind: "MethodReturn" };
     if (messageEnum & MessageFlags.ReturnValueInline) result.returnValue = this.readValueWithCode();
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
-    if (messageEnum & MessageFlags.ArgsInline) result.args = this.readArrayOfValueWithCode();
+    if (messageEnum & MessageFlags.ArgsInline) {
+      result.args = this.readArrayOfValueWithCode();
+    } else if ((messageEnum & MessageFlags.ReturnValueInArray) || (messageEnum & MessageFlags.ArgsInArray)) {
+      this.readCallArray(messageEnum, result);
+    }
     return result;
+  }
+
+  // §2.2.3.2 / §2.2.3.4 — reads the ArraySingleObject that immediately follows a method record
+  // when ArgsIsArray, ArgsInArray, or ReturnValueInArray flags are set.
+  private readCallArray(messageEnum: number, result: NrbfMethodCall | NrbfMethodReturn): void {
+    // Skip any leading BinaryLibrary records (grammar: callArray = 0*1(BinaryLibrary) ArraySingleObject ...)
+    let tag = this.r.readByte() as RecordTypeEnumeration;
+    while (tag === RecordTypeEnumeration.BinaryLibrary) {
+      this.readRecord(tag);
+      tag = this.r.readByte() as RecordTypeEnumeration;
+    }
+    if (tag !== RecordTypeEnumeration.ArraySingleObject) {
+      throw new Error(`Expected ArraySingleObject for callArray, got record type ${tag}`);
+    }
+
+    const objectId = this.r.readInt32();
+    const length = this.r.readInt32();
+    const arr: NrbfValue[] = [];
+    this.objects.set(objectId, arr);
+
+    if (result.kind === "MethodCall") {
+      if (messageEnum & MessageFlags.ArgsIsArray) {
+        // Each element IS one argument; shared array ref means forward-ref fixups propagate automatically.
+        for (let i = 0; i < length; i++) {
+          const idx = i;
+          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        }
+        result.args = arr;
+      } else {
+        // ArgsInArray: element 0 is the nested args sub-array.
+        {
+          const idx = 0;
+          const val = this.readReferenceableValue((v) => {
+            arr[idx] = v;
+            if (Array.isArray(v)) result.args = v;
+          });
+          arr.push(val);
+          if (Array.isArray(val)) result.args = val;
+        }
+        for (let i = 1; i < length; i++) {
+          const idx = i;
+          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        }
+      }
+    } else {
+      // MethodReturn: items in order — ReturnValue, OutputArguments (see §2.2.3.4).
+      let arrIdx = 0;
+      if (messageEnum & MessageFlags.ReturnValueInArray) {
+        const idx = arrIdx++;
+        const val = this.readReferenceableValue((v) => {
+          arr[idx] = v;
+          result.returnValue = v;
+        });
+        arr.push(val);
+        result.returnValue = val;
+      }
+      if (messageEnum & MessageFlags.ArgsInArray) {
+        const idx = arrIdx++;
+        const val = this.readReferenceableValue((v) => {
+          arr[idx] = v;
+          if (Array.isArray(v)) result.args = v;
+        });
+        arr.push(val);
+        if (Array.isArray(val)) result.args = val;
+      }
+      // Consume any remaining elements (exception, callContext, properties) without exposing them.
+      while (arr.length < length) {
+        const idx = arr.length;
+        arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+      }
+    }
   }
 
   // §2.2.2.2 — PrimitiveTypeEnum(18) + LengthPrefixedString

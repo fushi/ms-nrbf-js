@@ -141,42 +141,108 @@ class Serializer {
     return this.w.toBuffer();
   }
 
-  private writeHeader(): void {
+  private writeHeader(rootId = -1): void {
     this.w.writeByte(RecordTypeEnumeration.SerializedStreamHeader);
-    this.w.writeInt32(-1); // rootId — no root object in method call/return streams
+    this.w.writeInt32(rootId);
     this.w.writeInt32(-1); // headerId
     this.w.writeInt32(1);  // majorVersion
     this.w.writeInt32(0);  // minorVersion
   }
 
   private runMethodCall(call: NrbfMethodCall): Buffer {
+    const hasComplexArgs =
+      call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfObject(v));
+
+    if (hasComplexArgs && call.args) {
+      const seen = new Set<object>();
+      for (const arg of call.args) this.collectLibraries(arg as NrbfValue, seen);
+    }
+
     let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
     if (call.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
-    if (call.args !== undefined) flags = (flags & ~MessageFlags.NoArgs) | MessageFlags.ArgsInline;
+    if (call.args !== undefined) {
+      flags &= ~MessageFlags.NoArgs;
+      flags |= hasComplexArgs ? MessageFlags.ArgsIsArray : MessageFlags.ArgsInline;
+    }
 
-    this.writeHeader();
+    const callArrayId = hasComplexArgs ? this.nextId++ : undefined;
+    this.writeHeader(callArrayId ?? -1);
+
+    if (hasComplexArgs) {
+      for (const [name, id] of this.libraryIds) {
+        this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
+        this.w.writeInt32(id);
+        this.w.writeLengthPrefixedString(name);
+      }
+    }
+
     this.w.writeByte(RecordTypeEnumeration.MethodCall);
     this.w.writeInt32(flags);
     this.writeStringValueWithCode(call.methodName);
     this.writeStringValueWithCode(call.typeName);
     if (call.callContext !== undefined) this.writeStringValueWithCode(call.callContext);
-    if (call.args !== undefined) this.writeArrayOfValueWithCode(call.args);
+    if (!hasComplexArgs && call.args !== undefined) this.writeArrayOfValueWithCode(call.args);
+
+    if (hasComplexArgs && call.args !== undefined && callArrayId !== undefined) {
+      this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
+      this.w.writeInt32(callArrayId);
+      this.w.writeInt32(call.args.length);
+      for (const arg of call.args) this.writeAnyValue(arg as NrbfValue);
+    }
+
     this.w.writeByte(RecordTypeEnumeration.MessageEnd);
     return this.w.toBuffer();
   }
 
   private runMethodReturn(ret: NrbfMethodReturn): Buffer {
-    let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
-    flags |= ret.returnValue !== undefined ? MessageFlags.ReturnValueInline : MessageFlags.ReturnValueVoid;
-    if (ret.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
-    if (ret.args !== undefined) flags = (flags & ~MessageFlags.NoArgs) | MessageFlags.ArgsInline;
+    const hasComplexReturn =
+      ret.returnValue !== undefined && (Array.isArray(ret.returnValue) || isNrbfObject(ret.returnValue));
+    const hasComplexArgs =
+      ret.args !== undefined && ret.args.some((v) => Array.isArray(v) || isNrbfObject(v));
+    const needsCallArray = hasComplexReturn || hasComplexArgs;
 
-    this.writeHeader();
+    if (needsCallArray) {
+      const seen = new Set<object>();
+      if (ret.returnValue !== undefined) this.collectLibraries(ret.returnValue as NrbfValue, seen);
+      if (ret.args !== undefined) for (const arg of ret.args) this.collectLibraries(arg as NrbfValue, seen);
+    }
+
+    let flags = MessageFlags.NoContext | MessageFlags.NoArgs;
+    flags |= ret.returnValue !== undefined
+      ? hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline
+      : MessageFlags.ReturnValueVoid;
+    if (ret.callContext !== undefined) flags = (flags & ~MessageFlags.NoContext) | MessageFlags.ContextInline;
+    if (ret.args !== undefined) {
+      flags &= ~MessageFlags.NoArgs;
+      flags |= hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
+    }
+
+    const callArrayId = needsCallArray ? this.nextId++ : undefined;
+    this.writeHeader(callArrayId ?? -1);
+
+    if (needsCallArray) {
+      for (const [name, id] of this.libraryIds) {
+        this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
+        this.w.writeInt32(id);
+        this.w.writeLengthPrefixedString(name);
+      }
+    }
+
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
     this.w.writeInt32(flags);
-    if (ret.returnValue !== undefined) this.writeValueWithCode(ret.returnValue);
+    if (ret.returnValue !== undefined && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
     if (ret.callContext !== undefined) this.writeStringValueWithCode(ret.callContext);
-    if (ret.args !== undefined) this.writeArrayOfValueWithCode(ret.args);
+    if (ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args);
+
+    if (needsCallArray && callArrayId !== undefined) {
+      const elementCount = (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0);
+      this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
+      this.w.writeInt32(callArrayId);
+      this.w.writeInt32(elementCount);
+      if (hasComplexReturn && ret.returnValue !== undefined) this.writeAnyValue(ret.returnValue as NrbfValue);
+      if (hasComplexArgs && ret.args !== undefined) this.writeAnyValue(ret.args);
+    }
+
     this.w.writeByte(RecordTypeEnumeration.MessageEnd);
     return this.w.toBuffer();
   }
