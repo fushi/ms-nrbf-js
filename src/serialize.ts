@@ -210,7 +210,9 @@ class Serializer {
       this.w.writeInt32(callArrayId);
       this.w.writeInt32(elementCount);
       if (hasComplexArgs && call.args !== undefined) {
-        for (const arg of call.args) this.writeAnyValue(arg as NrbfValue);
+        for (let i = 0; i < call.args.length; i++) {
+          this.writeAnyValue(call.args[i] as NrbfValue, call.argTypes?.[i]);
+        }
       }
       if (hasGeneric) this.writeAnyValue(call.genericTypeArguments! as NrbfValue);
       if (hasSig) this.writeAnyValue(call.methodSignature! as NrbfValue);
@@ -305,7 +307,7 @@ class Serializer {
     if (pt !== PrimitiveTypeEnumeration.Null) this.w.writePrimitive(pt, v as PrimitiveValue);
   }
 
-  private writeArrayOfValueWithCode(arr: NrbfValue[], typeHints?: PrimitiveTypeEnumeration[]): void {
+  private writeArrayOfValueWithCode(arr: NrbfValue[], typeHints?: (PrimitiveTypeEnumeration | undefined)[]): void {
     this.w.writeInt32(arr.length);
     for (let i = 0; i < arr.length; i++) this.writeValueWithCode(arr[i] ?? null, typeHints?.[i]);
   }
@@ -341,9 +343,19 @@ class Serializer {
   }
 
   // Write any NrbfValue as a standalone record (allocates a fresh objectId for objects).
-  private writeAnyValue(value: NrbfValue): void {
+  // typeHint overrides type inference for primitive values (e.g. Single, Char, UInt32); it also
+  // routes string-shaped values (Char, Decimal) through MemberPrimitiveTyped instead of BinaryObjectString.
+  private writeAnyValue(value: NrbfValue, typeHint?: PrimitiveTypeEnumeration): void {
     if (value === null) {
       this.w.writeByte(RecordTypeEnumeration.ObjectNull);
+      return;
+    }
+    // If a type hint is provided (and is not String — which uses BinaryObjectString), write as
+    // MemberPrimitiveTyped. This handles Char/Decimal (string in JS) and Single/UInt32 etc.
+    if (typeHint !== undefined && typeHint !== PrimitiveTypeEnumeration.String && typeHint !== PrimitiveTypeEnumeration.Null) {
+      this.w.writeByte(RecordTypeEnumeration.MemberPrimitiveTyped);
+      this.w.writeByte(typeHint);
+      this.w.writePrimitive(typeHint, value as PrimitiveValue);
       return;
     }
     if (typeof value === "string") {

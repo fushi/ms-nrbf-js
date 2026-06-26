@@ -1146,6 +1146,56 @@ describe("serialize", () => {
       expect(result.returnType).toBe(PrimitiveTypeEnumeration.Single);
       expect(result.returnValue).toBe(2.5);
     });
+
+    it("preserves Single alongside an object arg in ArgsIsArray path", () => {
+      // Without the fix, inferPrimitiveType(1.5) returns Double, so the Single would round-trip
+      // as Double. With the fix, argTypes[1]=Single is threaded through writeAnyValue.
+      const obj: NrbfObject = { typeName: "Foo", members: { x: 1 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: [obj, 1.5],
+        argTypes: [undefined, PrimitiveTypeEnumeration.Single],
+      };
+      const result = deserialize(serialize(call)) as NrbfMethodCall;
+      expect(result.args![1]).toBeCloseTo(1.5);
+      expect(result.argTypes![1]).toBe(PrimitiveTypeEnumeration.Single);
+    });
+
+    it("preserves Char alongside an object arg in ArgsIsArray path", () => {
+      // Char is a string in JS — without the fix it would be written as BinaryObjectString,
+      // and the type hint would be lost entirely.
+      const obj: NrbfObject = { typeName: "Bar", members: { n: 42 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Send",
+        typeName: "ISvc",
+        args: [obj, "A"],
+        argTypes: [undefined, PrimitiveTypeEnumeration.Char],
+      };
+      const result = deserialize(serialize(call)) as NrbfMethodCall;
+      expect(result.args![1]).toBe("A");
+      expect(result.argTypes![1]).toBe(PrimitiveTypeEnumeration.Char);
+    });
+
+    it("deserializer populates argTypes from ArgsIsArray stream", () => {
+      // Serialise with explicit type hints, deserialise and verify argTypes is populated.
+      const obj: NrbfObject = { typeName: "Payload", members: { id: 0 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Process",
+        typeName: "IWorker",
+        args: [obj, 4_000_000_000, 3.14],
+        argTypes: [undefined, PrimitiveTypeEnumeration.UInt32, PrimitiveTypeEnumeration.Single],
+      };
+      const result = deserialize(serialize(call)) as NrbfMethodCall;
+      expect(result.argTypes![0]).toBeUndefined();
+      expect(result.argTypes![1]).toBe(PrimitiveTypeEnumeration.UInt32);
+      expect(result.argTypes![2]).toBe(PrimitiveTypeEnumeration.Single);
+      expect(result.args![1]).toBe(4_000_000_000);
+      expect(result.args![2]).toBeCloseTo(3.14);
+    });
   });
 
   describe("NrbfMethodCall messageProperties", () => {

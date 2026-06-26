@@ -157,6 +157,26 @@ class Deserializer {
     return this.readRecord(tag);
   }
 
+  // Like readReferenceableValue but also returns the PrimitiveTypeEnumeration when the record is
+  // MemberPrimitiveTyped. Used when reading call array args so argTypes can be populated.
+  private readReferenceableValueWithType(
+    onForwardRef: (v: NrbfValue) => void,
+  ): [NrbfValue, PrimitiveTypeEnumeration | undefined] {
+    const tag = this.r.readByte() as RecordTypeEnumeration;
+    if (tag === RecordTypeEnumeration.MemberReference) {
+      const idRef = this.r.readInt32();
+      const existing = this.objects.get(idRef);
+      if (existing !== undefined) return [existing, undefined];
+      this.fixups.push({ set: onForwardRef, idRef });
+      return [null, undefined];
+    }
+    if (tag === RecordTypeEnumeration.MemberPrimitiveTyped) {
+      const type = this.r.readByte() as PrimitiveTypeEnumeration;
+      return [this.r.readPrimitive(type), type];
+    }
+    return [this.readRecord(tag), undefined];
+  }
+
   // -------------------------------------------------------------------------
   // ClassInfo + MemberTypeInfo wire parsing
   // -------------------------------------------------------------------------
@@ -505,13 +525,18 @@ class Deserializer {
         const hasGeneric = !!(messageEnum & MessageFlags.GenericMethod);
         const argCount = length - (hasGeneric ? 1 : 0) - (hasSig ? 1 : 0) - (hasCtx ? 1 : 0) - (hasProps ? 1 : 0);
         const argSlice: NrbfValue[] = [];
+        const argTypeSlice: (PrimitiveTypeEnumeration | undefined)[] = [];
+        let hasArgType = false;
         for (let i = 0; i < argCount; i++) {
           const idx = i;
-          const val = this.readReferenceableValue((v) => { arr[idx] = v; argSlice[idx] = v; });
+          const [val, type] = this.readReferenceableValueWithType((v) => { arr[idx] = v; argSlice[idx] = v; });
           arr.push(val);
           argSlice.push(val);
+          argTypeSlice.push(type);
+          if (type !== undefined) hasArgType = true;
         }
         result.args = argSlice;
+        if (hasArgType) result.argTypes = argTypeSlice;
         if (hasGeneric) {
           const genIdx = arr.length;
           const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
