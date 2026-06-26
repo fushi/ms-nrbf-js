@@ -284,6 +284,8 @@ class Deserializer {
     this.storeClassMeta({ classInfo, libraryId }, `${classInfo.name}@${libraryId}`);
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
+    const libraryName = this.libraries.get(libraryId);
+    if (libraryName !== undefined) obj.libraryName = libraryName;
     this.objects.set(classInfo.objectId, obj);
     const knownMeta = this.classesByName.get(`${classInfo.name}@${libraryId}`);
     obj.members = knownMeta?.memberTypeInfo

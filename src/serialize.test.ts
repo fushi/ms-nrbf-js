@@ -377,6 +377,61 @@ describe("serialize", () => {
       const reserialized = serialize(deserialize(buf));
       expect(reserialized).toEqual(buf);
     });
+
+    it("round-trip of object_graph.nrbf preserves structure and values", () => {
+      const buf = readFileSync(join(fixturesDir, "object_graph.nrbf"));
+      const root = deserialize(serialize(deserialize(buf))) as NrbfObject;
+
+      expect(root.typeName).toBe("GraphRoot");
+      const nodeA = root.members["NodeA"] as NrbfObject;
+      const nodeB = root.members["NodeB"] as NrbfObject;
+      expect(nodeA.typeName).toBe("Node");
+      expect(nodeA.members["Value"]).toBe(100);
+      expect(nodeA.members["Tag"]).toBe("Alpha");
+      expect(nodeA.members["Peer"]).toBe(nodeB);
+
+      expect(nodeB.typeName).toBe("Node");
+      expect(nodeB.members["Value"]).toBe(200);
+      expect(nodeB.members["Tag"]).toBe("Beta");
+      expect(nodeB.members["Peer"]).toBe(nodeA);
+
+      const ver = root.members["Version"] as NrbfObject;
+      expect(ver.typeName).toBe("System.Version");
+      expect(ver.members["_Major"]).toBe(4);
+      expect(ver.members["_Minor"]).toBe(8);
+
+      expect(root.members["Matrix"]).toEqual([11, 12, 13, 21, 22, 23]);
+
+      const sparse = root.members["SparseSmall"] as (string | null)[];
+      expect(sparse[0]).toBe("first");
+      expect(sparse[10]).toBe("Beta");
+      expect(sparse[11]).toBe("last");
+      expect(sparse[1]).toBeNull();
+    });
+
+    it("byte-exact round-trip of return_value_inline_null.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "return_value_inline_null.nrbf"));
+      const reserialized = serialize(deserialize(buf));
+      expect(reserialized).toEqual(buf);
+    });
+
+    it("byte-exact round-trip of exception_in_array.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "exception_in_array.nrbf"));
+      const reserialized = serialize(deserialize(buf));
+      expect(reserialized).toEqual(buf);
+    });
+
+    it("byte-exact round-trip of context_in_array_call.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "context_in_array_call.nrbf"));
+      const reserialized = serialize(deserialize(buf));
+      expect(reserialized).toEqual(buf);
+    });
+
+    it("byte-exact round-trip of return_and_context_in_array.nrbf", () => {
+      const buf = readFileSync(join(fixturesDir, "return_and_context_in_array.nrbf"));
+      const reserialized = serialize(deserialize(buf));
+      expect(reserialized).toEqual(buf);
+    });
   });
 
   describe("ArraySingleObject with primitive elements", () => {
