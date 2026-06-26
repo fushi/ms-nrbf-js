@@ -342,6 +342,33 @@ class Serializer {
     }
   }
 
+  private writeNullRun(count: number): void {
+    if (count === 1) {
+      this.w.writeByte(RecordTypeEnumeration.ObjectNull);
+    } else if (count <= 255) {
+      this.w.writeByte(RecordTypeEnumeration.ObjectNullMultiple256);
+      this.w.writeByte(count);
+    } else {
+      this.w.writeByte(RecordTypeEnumeration.ObjectNullMultiple);
+      this.w.writeInt32(count);
+    }
+  }
+
+  private writeArrayElements(arr: NrbfValue[]): void {
+    let i = 0;
+    while (i < arr.length) {
+      if (arr[i] === null) {
+        let run = 1;
+        while (i + run < arr.length && arr[i + run] === null) run++;
+        this.writeNullRun(run);
+        i += run;
+      } else {
+        this.writeAnyValue(arr[i]!);
+        i++;
+      }
+    }
+  }
+
   // Write any NrbfValue as a standalone record (allocates a fresh objectId for objects).
   // typeHint overrides type inference for primitive values (e.g. Single, Char, UInt32); it also
   // routes string-shaped values (Char, Decimal) through MemberPrimitiveTyped instead of BinaryObjectString.
@@ -561,7 +588,7 @@ class Serializer {
       this.w.writeByte(RecordTypeEnumeration.ArraySingleString);
       this.w.writeInt32(objectId);
       this.w.writeInt32(arr.length);
-      for (const el of arr) this.writeAnyValue(el);
+      this.writeArrayElements(arr);
       return;
     }
 
@@ -580,14 +607,14 @@ class Serializer {
       } else {
         this.w.writeLengthPrefixedString(classEntry.className);
       }
-      for (const el of arr) this.writeAnyValue(el);
+      this.writeArrayElements(arr);
       return;
     }
 
     this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
     this.w.writeInt32(objectId);
     this.w.writeInt32(arr.length);
-    for (const el of arr) this.writeAnyValue(el);
+    this.writeArrayElements(arr);
   }
 }
 

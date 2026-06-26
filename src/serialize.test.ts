@@ -621,6 +621,60 @@ describe("serialize", () => {
     });
   });
 
+  describe("ObjectNullMultiple / ObjectNullMultiple256 null-run compression", () => {
+    it("emits ObjectNull for a single null in an array", () => {
+      const buf = serialize(["a", null, "b"]);
+      const nullIdx = buf.indexOf(RecordTypeEnumeration.ObjectNull, 17);
+      expect(buf[nullIdx]).toBe(RecordTypeEnumeration.ObjectNull);
+    });
+
+    it("emits ObjectNullMultiple256 for 2 consecutive nulls", () => {
+      const buf = serialize(["a", null, null, "b"]);
+      const idx = buf.indexOf(RecordTypeEnumeration.ObjectNullMultiple256);
+      expect(idx).toBeGreaterThan(-1);
+      expect(buf[idx + 1]).toBe(2);
+    });
+
+    it("emits ObjectNullMultiple256 for 255 consecutive nulls", () => {
+      const arr: (string | null)[] = ["start", ...Array<null>(255).fill(null), "end"];
+      const buf = serialize(arr);
+      const idx = buf.indexOf(RecordTypeEnumeration.ObjectNullMultiple256);
+      expect(idx).toBeGreaterThan(-1);
+      expect(buf[idx + 1]).toBe(255);
+    });
+
+    it("emits ObjectNullMultiple for 256 consecutive nulls", () => {
+      const arr: (string | null)[] = ["start", ...Array<null>(256).fill(null), "end"];
+      const buf = serialize(arr);
+      const idx = buf.indexOf(RecordTypeEnumeration.ObjectNullMultiple);
+      expect(idx).toBeGreaterThan(-1);
+      expect(buf.readInt32LE(idx + 1)).toBe(256);
+    });
+
+    it("round-trips an array with 2 consecutive nulls", () => {
+      expect(roundTrip(["a", null, null, "b"])).toEqual(["a", null, null, "b"]);
+    });
+
+    it("round-trips an array with 255 consecutive nulls", () => {
+      const arr: (string | null)[] = ["start", ...Array<null>(255).fill(null), "end"];
+      expect(roundTrip(arr)).toEqual(arr);
+    });
+
+    it("round-trips an array with 256 consecutive nulls", () => {
+      const arr: (string | null)[] = ["start", ...Array<null>(256).fill(null), "end"];
+      expect(roundTrip(arr)).toEqual(arr);
+    });
+
+    it("round-trips an ArraySingleObject with multiple consecutive nulls", () => {
+      expect(roundTrip([42, null, null, null, "x"])).toEqual([42, null, null, null, "x"]);
+    });
+
+    it("round-trips multiple separate null runs", () => {
+      const arr: (string | null)[] = [null, null, "mid", null, null, null];
+      expect(roundTrip(arr)).toEqual(arr);
+    });
+  });
+
   describe("ArraySingleObject with primitive elements", () => {
     it("round-trips a mixed primitive+null array", () => {
       expect(roundTrip([42, null])).toEqual([42, null]);
