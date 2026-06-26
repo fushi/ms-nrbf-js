@@ -133,16 +133,50 @@ describe("BinaryReader", () => {
   });
 
   describe("readDateTime", () => {
-    it("decodes ticks and kind from packed 64-bit value", () => {
-      // ticks=0, kind=UTC(1) → raw = 1n << 62n → LE bytes: [0,0,0,0,0,0,0,0x40]
+    it("decodes kind=UTC(1) with ticks=0", () => {
+      // raw = 1n << 62n → LE bytes: [0,0,0,0,0,0,0,0x40]
       const dt = reader(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40).readDateTime();
       expect(dt.ticks).toBe(0n);
       expect(dt.kind).toBe(1);
+    });
 
-      // ticks=1, kind=Unspecified(0) → raw = 1n
-      const dt2 = reader(0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00).readDateTime();
-      expect(dt2.ticks).toBe(1n);
-      expect(dt2.kind).toBe(0);
+    it("decodes kind=Unspecified(0) with ticks=1", () => {
+      const dt = reader(0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00).readDateTime();
+      expect(dt.ticks).toBe(1n);
+      expect(dt.kind).toBe(0);
+    });
+
+    it("decodes kind=Local(2) — high bits 10", () => {
+      // kind=2 → 2n << 62n = 0x8000000000000000n → LE bytes: [0,0,0,0,0,0,0,0x80]
+      const dt = reader(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80).readDateTime();
+      expect(dt.ticks).toBe(0n);
+      expect(dt.kind).toBe(2);
+    });
+
+    it("decodes max ticks (62-bit all-ones) with kind=Unspecified", () => {
+      // 0x3fffffffffffffff LE = [0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x3f]
+      const dt = reader(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x3f).readDateTime();
+      expect(dt.ticks).toBe(0x3fffffffffffffffn);
+      expect(dt.kind).toBe(0);
+    });
+
+  });
+
+  describe("TimeSpan", () => {
+    it("reads 1 second as positive ticks (readInt64)", () => {
+      expect(reader(0x80, 0x96, 0x98, 0x00, 0x00, 0x00, 0x00, 0x00).readPrimitive(PrimitiveTypeEnumeration.TimeSpan))
+        .toBe(10_000_000n);
+    });
+
+    it("reads negative TimeSpan ticks", () => {
+      // -1 tick → two's-complement 64-bit → all 0xff
+      expect(reader(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff).readPrimitive(PrimitiveTypeEnumeration.TimeSpan))
+        .toBe(-1n);
+    });
+
+    it("reads zero TimeSpan", () => {
+      expect(reader(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00).readPrimitive(PrimitiveTypeEnumeration.TimeSpan))
+        .toBe(0n);
     });
   });
 

@@ -79,11 +79,52 @@ describe("BinaryWriter", () => {
       );
     });
 
-    it("DateTime → packed 64-bit (ticks + kind)", () => {
+    it("TimeSpan → negative ticks (two's complement)", () => {
+      // -1 tick → all 0xff bytes
+      expect(writePrimitive(PrimitiveTypeEnumeration.TimeSpan, -1n)).toEqual(
+        Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]),
+      );
+    });
+
+    it("TimeSpan → zero", () => {
+      expect(writePrimitive(PrimitiveTypeEnumeration.TimeSpan, 0n)).toEqual(
+        Buffer.from([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+      );
+    });
+
+    it("DateTime → packed 64-bit, kind=UTC(1)", () => {
       const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: 0n, kind: 1 });
       expect(buf).toHaveLength(8);
-      // kind=1 (UTC) stored in top 2 bits → 1n << 62n
       expect(buf.readBigUInt64LE(0)).toBe(1n << 62n);
+    });
+
+    it("DateTime → packed 64-bit, kind=Local(2)", () => {
+      // kind=2 → 2n << 62n = 0x8000000000000000n
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: 0n, kind: 2 });
+      expect(buf.readBigUInt64LE(0)).toBe(2n << 62n);
+    });
+
+    it("DateTime → packed 64-bit, kind=Unspecified(0) with specific ticks", () => {
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: 123_456_789n, kind: 0 });
+      expect(buf.readBigUInt64LE(0)).toBe(123_456_789n);
+    });
+
+    it("DateTime → packed 64-bit, max ticks (62-bit) preserved", () => {
+      const maxTicks = 0x3fffffffffffffffn;
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: maxTicks, kind: 0 });
+      expect(buf.readBigUInt64LE(0)).toBe(maxTicks);
+    });
+
+    it("Decimal → negative value", () => {
+      expect(writePrimitive(PrimitiveTypeEnumeration.Decimal, "-99.5")).toEqual(
+        Buffer.from([0x05, 0x2d, 0x39, 0x39, 0x2e, 0x35]),
+      );
+    });
+
+    it("Decimal → zero", () => {
+      expect(writePrimitive(PrimitiveTypeEnumeration.Decimal, "0")).toEqual(
+        Buffer.from([0x01, 0x30]),
+      );
     });
 
     it("UInt16 → little-endian unsigned 16-bit", () => {

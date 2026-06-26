@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { serialize } from "./serialize.js";
 import { PrimitiveTypeEnumeration, RecordTypeEnumeration } from "./enums.js";
-import type { NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
+import type { DateTime, NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
 
@@ -238,6 +238,133 @@ describe("serialize", () => {
       const second = deserialize(serialize(first)) as NrbfObject;
       expect(second.memberTypes?.["Age"]).toBe(PrimitiveTypeEnumeration.Int32);
       expect(second.memberTypes?.["Score"]).toBe(PrimitiveTypeEnumeration.Double);
+    });
+  });
+
+  describe("Char round-trip", () => {
+    function charObj(c: string): NrbfObject {
+      return { typeName: "T", memberTypes: { c: PrimitiveTypeEnumeration.Char }, members: { c } };
+    }
+
+    it("round-trips ASCII char preserving Char type", () => {
+      const result = roundTrip(charObj("A")) as NrbfObject;
+      expect(result.members["c"]).toBe("A");
+      expect(result.memberTypes?.["c"]).toBe(PrimitiveTypeEnumeration.Char);
+    });
+
+    it("round-trips 2-byte UTF-8 char (é)", () => {
+      const result = roundTrip(charObj("é")) as NrbfObject;
+      expect(result.members["c"]).toBe("é");
+      expect(result.memberTypes?.["c"]).toBe(PrimitiveTypeEnumeration.Char);
+    });
+
+    it("round-trips 3-byte UTF-8 char (€)", () => {
+      const result = roundTrip(charObj("€")) as NrbfObject;
+      expect(result.members["c"]).toBe("€");
+      expect(result.memberTypes?.["c"]).toBe(PrimitiveTypeEnumeration.Char);
+    });
+
+    it("without memberTypes hint, char is serialized as String (not Char)", () => {
+      const obj: NrbfObject = { typeName: "T", members: { c: "A" } };
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["c"]).toBe("A");
+      // No Char hint → inferred as String
+      expect(result.memberTypes?.["c"]).toBeUndefined();
+    });
+  });
+
+  describe("Decimal round-trip", () => {
+    function decObj(d: string): NrbfObject {
+      return { typeName: "T", memberTypes: { d: PrimitiveTypeEnumeration.Decimal }, members: { d } };
+    }
+
+    it("round-trips a positive decimal", () => {
+      const result = roundTrip(decObj("12.34")) as NrbfObject;
+      expect(result.members["d"]).toBe("12.34");
+      expect(result.memberTypes?.["d"]).toBe(PrimitiveTypeEnumeration.Decimal);
+    });
+
+    it("round-trips a negative decimal", () => {
+      const result = roundTrip(decObj("-9999999999999999.9999")) as NrbfObject;
+      expect(result.members["d"]).toBe("-9999999999999999.9999");
+      expect(result.memberTypes?.["d"]).toBe(PrimitiveTypeEnumeration.Decimal);
+    });
+
+    it("round-trips zero decimal", () => {
+      const result = roundTrip(decObj("0")) as NrbfObject;
+      expect(result.members["d"]).toBe("0");
+      expect(result.memberTypes?.["d"]).toBe(PrimitiveTypeEnumeration.Decimal);
+    });
+  });
+
+  describe("TimeSpan round-trip", () => {
+    function tsObj(ts: bigint): NrbfObject {
+      return { typeName: "T", memberTypes: { ts: PrimitiveTypeEnumeration.TimeSpan }, members: { ts } };
+    }
+
+    it("round-trips 1 second (10_000_000 ticks)", () => {
+      const result = roundTrip(tsObj(10_000_000n)) as NrbfObject;
+      expect(result.members["ts"]).toBe(10_000_000n);
+      expect(result.memberTypes?.["ts"]).toBe(PrimitiveTypeEnumeration.TimeSpan);
+    });
+
+    it("round-trips negative TimeSpan (-1 tick)", () => {
+      const result = roundTrip(tsObj(-1n)) as NrbfObject;
+      expect(result.members["ts"]).toBe(-1n);
+      expect(result.memberTypes?.["ts"]).toBe(PrimitiveTypeEnumeration.TimeSpan);
+    });
+
+    it("round-trips zero TimeSpan", () => {
+      const result = roundTrip(tsObj(0n)) as NrbfObject;
+      expect(result.members["ts"]).toBe(0n);
+      expect(result.memberTypes?.["ts"]).toBe(PrimitiveTypeEnumeration.TimeSpan);
+    });
+
+    it("without memberTypes hint, bigint is inferred as Int64 (not TimeSpan)", () => {
+      const obj: NrbfObject = { typeName: "T", members: { ts: 10_000_000n } };
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.members["ts"]).toBe(10_000_000n);
+      expect(result.memberTypes?.["ts"]).toBe(PrimitiveTypeEnumeration.Int64);
+    });
+  });
+
+  describe("DateTime round-trip", () => {
+    function dtObj(dt: DateTime): NrbfObject {
+      return { typeName: "T", members: { dt } };
+    }
+
+    it("round-trips UTC DateTime (kind=1)", () => {
+      const result = roundTrip(dtObj({ ticks: 638_000_000_000_000_000n, kind: 1 })) as NrbfObject;
+      const dt = result.members["dt"] as DateTime;
+      expect(dt.ticks).toBe(638_000_000_000_000_000n);
+      expect(dt.kind).toBe(1);
+      expect(result.memberTypes?.["dt"]).toBe(PrimitiveTypeEnumeration.DateTime);
+    });
+
+    it("round-trips Local DateTime (kind=2)", () => {
+      const result = roundTrip(dtObj({ ticks: 0n, kind: 2 })) as NrbfObject;
+      const dt = result.members["dt"] as DateTime;
+      expect(dt.ticks).toBe(0n);
+      expect(dt.kind).toBe(2);
+    });
+
+    it("round-trips Unspecified DateTime (kind=0) with arbitrary ticks", () => {
+      const result = roundTrip(dtObj({ ticks: 123_456_789n, kind: 0 })) as NrbfObject;
+      const dt = result.members["dt"] as DateTime;
+      expect(dt.ticks).toBe(123_456_789n);
+      expect(dt.kind).toBe(0);
+    });
+
+    it("round-trips max ticks (62-bit all-ones)", () => {
+      const maxTicks = 0x3fffffffffffffffn;
+      const result = roundTrip(dtObj({ ticks: maxTicks, kind: 0 })) as NrbfObject;
+      expect((result.members["dt"] as DateTime).ticks).toBe(maxTicks);
+    });
+
+    it("DateTime is auto-inferred without memberTypes hint", () => {
+      const obj: NrbfObject = { typeName: "T", members: { dt: { ticks: 1n, kind: 1 } } };
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.memberTypes?.["dt"]).toBe(PrimitiveTypeEnumeration.DateTime);
     });
   });
 
