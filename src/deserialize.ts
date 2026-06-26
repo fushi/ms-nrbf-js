@@ -10,6 +10,7 @@ import {
   ClassInfo,
   MemberTypeEntry,
   MemberTypeInfo,
+  NrbfArray,
   NrbfMethodCall,
   NrbfMethodReturn,
   NrbfObject,
@@ -381,7 +382,7 @@ class Deserializer {
     return arr;
   }
 
-  private readBinaryArray(): NrbfValue[] {
+  private readBinaryArray(): NrbfValue {
     const objectId = this.r.readInt32();
     const arrayTypeEnum = this.r.readByte() as BinaryArrayTypeEnumeration;
     const rank = this.r.readInt32();
@@ -392,29 +393,62 @@ class Deserializer {
       arrayTypeEnum === BinaryArrayTypeEnumeration.SingleOffset ||
       arrayTypeEnum === BinaryArrayTypeEnumeration.JaggedOffset ||
       arrayTypeEnum === BinaryArrayTypeEnumeration.RectangularOffset;
-    if (hasLowerBounds) for (let i = 0; i < rank; i++) this.r.readInt32();
+    const lowerBounds: number[] = [];
+    if (hasLowerBounds) for (let i = 0; i < rank; i++) lowerBounds.push(this.r.readInt32());
 
     const typeEnum = this.r.readByte() as BinaryTypeEnumeration;
     let primitiveType: PrimitiveTypeEnumeration | undefined;
+    let elementClassName: string | undefined;
+    let elementLibraryName: string | undefined;
     switch (typeEnum) {
       case BinaryTypeEnumeration.Primitive:
       case BinaryTypeEnumeration.PrimitiveArray:
         primitiveType = this.r.readByte() as PrimitiveTypeEnumeration;
         break;
-      case BinaryTypeEnumeration.SystemClass: this.r.readLengthPrefixedString(); break;
-      case BinaryTypeEnumeration.Class: this.r.readLengthPrefixedString(); this.r.readInt32(); break;
+      case BinaryTypeEnumeration.SystemClass:
+        elementClassName = this.r.readLengthPrefixedString();
+        break;
+      case BinaryTypeEnumeration.Class: {
+        elementClassName = this.r.readLengthPrefixedString();
+        const libraryId = this.r.readInt32();
+        elementLibraryName = this.libraries.get(libraryId);
+        break;
+      }
     }
 
     const totalElements = lengths.reduce((a, b) => a * b, 1);
-    const arr: NrbfValue[] = [];
-    this.objects.set(objectId, arr);
 
-    if (primitiveType !== undefined) {
-      for (let i = 0; i < totalElements; i++) arr.push(this.r.readPrimitive(primitiveType));
-    } else {
-      this.readArrayElements(arr, totalElements);
+    // BinaryArray(Single) with no offset keeps the existing NrbfValue[] representation.
+    if (arrayTypeEnum === BinaryArrayTypeEnumeration.Single) {
+      const arr: NrbfValue[] = [];
+      this.objects.set(objectId, arr);
+      if (primitiveType !== undefined) {
+        for (let i = 0; i < totalElements; i++) arr.push(this.r.readPrimitive(primitiveType));
+      } else {
+        this.readArrayElements(arr, totalElements);
+      }
+      return arr;
     }
-    return arr;
+
+    // All other variants (Jagged, Rectangular, *Offset) return NrbfArray.
+    const elements: NrbfValue[] = [];
+    const nrbfArr: NrbfArray = {
+      arrayType: arrayTypeEnum,
+      lengths,
+      ...(hasLowerBounds ? { lowerBounds } : {}),
+      elementBinaryType: typeEnum,
+      ...(primitiveType !== undefined ? { elementPrimitiveType: primitiveType } : {}),
+      ...(elementClassName !== undefined ? { elementClassName } : {}),
+      ...(elementLibraryName !== undefined ? { elementLibraryName } : {}),
+      elements,
+    };
+    this.objects.set(objectId, nrbfArr);
+    if (primitiveType !== undefined) {
+      for (let i = 0; i < totalElements; i++) elements.push(this.r.readPrimitive(primitiveType));
+    } else {
+      this.readArrayElements(elements, totalElements);
+    }
+    return nrbfArr;
   }
 
   private readArrayElements(arr: NrbfValue[], remaining: number): void {

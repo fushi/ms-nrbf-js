@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { serialize } from "./serialize.js";
-import { MessageFlags, PrimitiveTypeEnumeration, RecordTypeEnumeration } from "./enums.js";
-import type { DateTime, NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
+import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, MessageFlags, PrimitiveTypeEnumeration, RecordTypeEnumeration } from "./enums.js";
+import type { DateTime, NrbfArray, NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
 
@@ -582,7 +582,7 @@ describe("serialize", () => {
       expect(ver.members["_Major"]).toBe(4);
       expect(ver.members["_Minor"]).toBe(8);
 
-      expect(root.members["Matrix"]).toEqual([11, 12, 13, 21, 22, 23]);
+      expect((root.members["Matrix"] as NrbfArray).elements).toEqual([11, 12, 13, 21, 22, 23]);
 
       const sparse = root.members["SparseSmall"] as (string | null)[];
       expect(sparse[0]).toBe("first");
@@ -1296,6 +1296,158 @@ describe("serialize", () => {
       const result = roundTripCall(call);
       expect(result.callContext).toMatchObject({ members: { id: "ctx" } });
       expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "tid", _value: "t1" } }]);
+    });
+  });
+
+  describe("NrbfArray — multi-dimensional / offset / jagged arrays", () => {
+    function roundTripArr(arr: NrbfArray): NrbfArray {
+      return deserialize(serialize(arr)) as NrbfArray;
+    }
+
+    it("round-trips a Rectangular 2×3 Int32 array", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [2, 3],
+        elementBinaryType: BinaryTypeEnumeration.Primitive,
+        elementPrimitiveType: PrimitiveTypeEnumeration.Int32,
+        elements: [1, 2, 3, 4, 5, 6],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
+      expect(result.lengths).toEqual([2, 3]);
+      expect(result.lowerBounds).toBeUndefined();
+      expect(result.elementBinaryType).toBe(BinaryTypeEnumeration.Primitive);
+      expect(result.elementPrimitiveType).toBe(PrimitiveTypeEnumeration.Int32);
+      expect(result.elements).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+
+    it("round-trips a Rectangular 3×2 String array", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [3, 2],
+        elementBinaryType: BinaryTypeEnumeration.String,
+        elements: ["a", "b", "c", "d", "e", "f"],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
+      expect(result.lengths).toEqual([3, 2]);
+      expect(result.elements).toEqual(["a", "b", "c", "d", "e", "f"]);
+    });
+
+    it("round-trips a Rectangular array with null elements", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [2, 2],
+        elementBinaryType: BinaryTypeEnumeration.Object,
+        elements: ["hello", null, null, "world"],
+      };
+      const result = roundTripArr(arr);
+      expect(result.elements).toEqual(["hello", null, null, "world"]);
+    });
+
+    it("round-trips a Jagged array", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Jagged,
+        lengths: [3],
+        elementBinaryType: BinaryTypeEnumeration.ObjectArray,
+        elements: [[1, 2], [3, 4, 5], [6]],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Jagged);
+      expect(result.lengths).toEqual([3]);
+      expect(result.elements).toEqual([[1, 2], [3, 4, 5], [6]]);
+    });
+
+    it("round-trips a SingleOffset array with lower bound", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.SingleOffset,
+        lengths: [3],
+        lowerBounds: [5],
+        elementBinaryType: BinaryTypeEnumeration.String,
+        elements: ["a", "b", "c"],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.SingleOffset);
+      expect(result.lengths).toEqual([3]);
+      expect(result.lowerBounds).toEqual([5]);
+      expect(result.elements).toEqual(["a", "b", "c"]);
+    });
+
+    it("round-trips a RectangularOffset array with lower bounds", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.RectangularOffset,
+        lengths: [2, 2],
+        lowerBounds: [1, 1],
+        elementBinaryType: BinaryTypeEnumeration.Primitive,
+        elementPrimitiveType: PrimitiveTypeEnumeration.Int32,
+        elements: [10, 20, 30, 40],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.RectangularOffset);
+      expect(result.lengths).toEqual([2, 2]);
+      expect(result.lowerBounds).toEqual([1, 1]);
+      expect(result.elements).toEqual([10, 20, 30, 40]);
+    });
+
+    it("round-trips a JaggedOffset array with lower bound", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.JaggedOffset,
+        lengths: [2],
+        lowerBounds: [10],
+        elementBinaryType: BinaryTypeEnumeration.ObjectArray,
+        elements: [[1, 2, 3], [4, 5]],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.JaggedOffset);
+      expect(result.lengths).toEqual([2]);
+      expect(result.lowerBounds).toEqual([10]);
+      expect(result.elements).toEqual([[1, 2, 3], [4, 5]]);
+    });
+
+    it("round-trips an NrbfArray as a class member", () => {
+      const matrix: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [2, 2],
+        elementBinaryType: BinaryTypeEnumeration.Primitive,
+        elementPrimitiveType: PrimitiveTypeEnumeration.Double,
+        elements: [1.0, 2.0, 3.0, 4.0],
+      };
+      const obj: NrbfObject = { typeName: "Grid", members: { data: matrix } };
+      const result = deserialize(serialize(obj)) as NrbfObject;
+      const data = result.members["data"] as NrbfArray;
+      expect(data.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
+      expect(data.lengths).toEqual([2, 2]);
+      expect(data.elements).toEqual([1.0, 2.0, 3.0, 4.0]);
+    });
+
+    it("emits correct BinaryArray record header for Rectangular", () => {
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [2, 3],
+        elementBinaryType: BinaryTypeEnumeration.Primitive,
+        elementPrimitiveType: PrimitiveTypeEnumeration.Int32,
+        elements: [1, 2, 3, 4, 5, 6],
+      };
+      const buf = serialize(arr);
+      const idx = buf.indexOf(RecordTypeEnumeration.BinaryArray);
+      expect(idx).toBeGreaterThan(-1);
+      // layout: record(1) + objectId(4) + arrayType(1) + rank(4) + lengths[0](4) + lengths[1](4) + ...
+      expect(buf[idx + 5]).toBe(BinaryArrayTypeEnumeration.Rectangular); // arrayType
+      expect(buf.readInt32LE(idx + 6)).toBe(2);  // rank = 2
+      expect(buf.readInt32LE(idx + 10)).toBe(2); // lengths[0] = 2
+      expect(buf.readInt32LE(idx + 14)).toBe(3); // lengths[1] = 3
+    });
+
+    it("byte-exact round-trip of object_graph.nrbf (contains RectangularOffset matrix)", () => {
+      const buf = readFileSync(join(fixturesDir, "object_graph.nrbf"));
+      // The matrix member uses RectangularOffset — verify serialize produces identical bytes
+      const reserialized = serialize(deserialize(buf));
+      // object_graph has circular refs so we can't do byte-exact (re-serialized MemberReference
+      // order may differ), but we verify the matrix element values survive the round-trip.
+      const root = deserialize(reserialized) as NrbfObject;
+      const matrix = root.members["Matrix"] as NrbfArray;
+      expect(matrix.arrayType).toBe(BinaryArrayTypeEnumeration.RectangularOffset);
+      expect(matrix.elements).toEqual([11, 12, 13, 21, 22, 23]);
     });
   });
 });

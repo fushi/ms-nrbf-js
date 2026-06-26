@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { PrimitiveTypeEnumeration } from "./enums.js";
-import type { NrbfMethodCall, NrbfMethodReturn, NrbfObject } from "./types.js";
+import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration as PTE } from "./enums.js";
+import type { NrbfArray, NrbfMethodCall, NrbfMethodReturn, NrbfObject } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
 
@@ -490,8 +491,12 @@ describe("deserialize", () => {
       expect(packet.members["Label"]).toBe("demo-packet");
       expect(packet.members["Count"]).toBe(42);
 
-      // Matrix (rectangular BinaryArray, flattened row-major)
-      expect(root.members["Matrix"]).toEqual([11, 12, 13, 21, 22, 23]);
+      // Matrix (rectangular BinaryArray — now returned as NrbfArray with full dimension info)
+      const matrix = root.members["Matrix"] as NrbfArray;
+      expect(matrix.arrayType).toBe(BinaryArrayTypeEnumeration.RectangularOffset);
+      expect(matrix.elements).toEqual([11, 12, 13, 21, 22, 23]);
+      expect(matrix.elementBinaryType).toBe(BinaryTypeEnumeration.Primitive);
+      expect(matrix.elementPrimitiveType).toBe(PTE.Int32);
 
       // Sparse arrays: nulls filled by ObjectNullMultiple/ObjectNullMultiple256
       const sparse = root.members["SparseSmall"] as (string | null)[];

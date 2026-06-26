@@ -9,6 +9,7 @@ import { BinaryWriter } from "./writer.js";
 import type {
   DateTime,
   MemberTypeEntry,
+  NrbfArray,
   NrbfMethodCall,
   NrbfMethodReturn,
   NrbfObject,
@@ -38,6 +39,16 @@ function isNrbfObject(v: unknown): v is NrbfObject {
     !Array.isArray(v) &&
     "typeName" in v &&
     "members" in v
+  );
+}
+
+function isNrbfArray(v: unknown): v is NrbfArray {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    "arrayType" in v &&
+    "elements" in v
   );
 }
 
@@ -151,7 +162,7 @@ class Serializer {
 
   private runMethodCall(call: NrbfMethodCall): Buffer {
     const hasComplexArgs =
-      call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfObject(v));
+      call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v));
     const ctxIsObject = call.callContext !== undefined && isNrbfObject(call.callContext);
     const hasGeneric = call.genericTypeArguments !== undefined;
     const hasSig = call.methodSignature !== undefined;
@@ -228,9 +239,9 @@ class Serializer {
     const hasException = ret.exception !== undefined;
     // ExceptionInArray is exclusive with Return and Args categories per spec §2.2.1.1.
     const hasComplexReturn = !hasException &&
-      ret.returnValue !== undefined && (Array.isArray(ret.returnValue) || isNrbfObject(ret.returnValue));
+      ret.returnValue !== undefined && (Array.isArray(ret.returnValue) || isNrbfArray(ret.returnValue) || isNrbfObject(ret.returnValue));
     const hasComplexArgs = !hasException &&
-      ret.args !== undefined && ret.args.some((v) => Array.isArray(v) || isNrbfObject(v));
+      ret.args !== undefined && ret.args.some((v) => Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v));
     const ctxIsObject = ret.callContext !== undefined && isNrbfObject(ret.callContext);
     const needsCallArray = hasComplexReturn || hasComplexArgs || hasException || ctxIsObject || ret.messageProperties !== undefined;
 
@@ -319,6 +330,11 @@ class Serializer {
 
     if (Array.isArray(value)) {
       for (const el of value) this.collectLibraries(el, seen);
+    } else if (isNrbfArray(value)) {
+      if (value.elementLibraryName && !this.libraryIds.has(value.elementLibraryName)) {
+        this.libraryIds.set(value.elementLibraryName, this.nextId++);
+      }
+      for (const el of value.elements) this.collectLibraries(el, seen);
     } else if (isNrbfObject(value)) {
       if (value.libraryName && !this.libraryIds.has(value.libraryName)) {
         this.libraryIds.set(value.libraryName, this.nextId++);
@@ -336,6 +352,9 @@ class Serializer {
     } else if (Array.isArray(value)) {
       this.objectIds.set(value, objectId);
       this.writeArray(value, objectId);
+    } else if (isNrbfArray(value)) {
+      this.objectIds.set(value, objectId);
+      this.writeNrbfArray(value, objectId);
     } else if (isNrbfObject(value)) {
       this.objectIds.set(value, objectId);
       this.writeNrbfObject(value, objectId);
@@ -570,6 +589,42 @@ class Serializer {
       return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName, libraryId: this.libraryIds.get(libraryName) ?? 0 } };
     }
     return { binaryType: BinaryTypeEnumeration.SystemClass, className: typeName };
+  }
+
+  private writeNrbfArray(arr: NrbfArray, objectId: number): void {
+    const isOffset =
+      arr.arrayType === BinaryArrayTypeEnumeration.SingleOffset ||
+      arr.arrayType === BinaryArrayTypeEnumeration.JaggedOffset ||
+      arr.arrayType === BinaryArrayTypeEnumeration.RectangularOffset;
+
+    this.w.writeByte(RecordTypeEnumeration.BinaryArray);
+    this.w.writeInt32(objectId);
+    this.w.writeByte(arr.arrayType);
+    this.w.writeInt32(arr.lengths.length); // rank
+    for (const l of arr.lengths) this.w.writeInt32(l);
+    if (isOffset && arr.lowerBounds) {
+      for (const lb of arr.lowerBounds) this.w.writeInt32(lb);
+    }
+    this.w.writeByte(arr.elementBinaryType);
+    switch (arr.elementBinaryType) {
+      case BinaryTypeEnumeration.Primitive:
+      case BinaryTypeEnumeration.PrimitiveArray:
+        this.w.writeByte(arr.elementPrimitiveType!);
+        break;
+      case BinaryTypeEnumeration.SystemClass:
+        this.w.writeLengthPrefixedString(arr.elementClassName!);
+        break;
+      case BinaryTypeEnumeration.Class:
+        this.w.writeLengthPrefixedString(arr.elementClassName!);
+        this.w.writeInt32(this.libraryIds.get(arr.elementLibraryName!) ?? 0);
+        break;
+    }
+
+    if (arr.elementBinaryType === BinaryTypeEnumeration.Primitive) {
+      for (const el of arr.elements) this.w.writePrimitive(arr.elementPrimitiveType!, el as PrimitiveValue);
+    } else {
+      this.writeArrayElements(arr.elements);
+    }
   }
 
   private writeArray(arr: NrbfValue[], objectId: number): void {

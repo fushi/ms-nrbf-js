@@ -1,4 +1,4 @@
-import { BinaryTypeEnumeration, PrimitiveTypeEnumeration } from "./enums.js";
+import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration } from "./enums.js";
 
 // §2.1.1.5 — 2-bit Kind field packed into the high bits of the DateTime INT64
 export enum DateTimeKind {
@@ -58,6 +58,20 @@ export interface NrbfObject {
   members: { [name: string]: NrbfValue };
 }
 
+// Multi-dimensional, jagged, or lower-bounded (offset) BinaryArray.
+// Used for any BinaryArray variant other than Single (rank-1, no offset).
+// Elements are stored flat in row-major order (same as the wire format).
+export interface NrbfArray {
+  arrayType: BinaryArrayTypeEnumeration;
+  lengths: number[];              // per-dimension length; product gives totalElements
+  lowerBounds?: number[];         // present only for *Offset variants; same length as lengths
+  elementBinaryType: BinaryTypeEnumeration;
+  elementPrimitiveType?: PrimitiveTypeEnumeration; // for Primitive / PrimitiveArray element types
+  elementClassName?: string;      // for SystemClass / Class element types (the class type name)
+  elementLibraryName?: string;    // for Class element type only (the library name; undefined = system)
+  elements: NrbfValue[];
+}
+
 export type NrbfValue =
   | null
   | boolean
@@ -66,6 +80,7 @@ export type NrbfValue =
   | string
   | DateTime
   | NrbfObject
+  | NrbfArray
   | NrbfValue[];
 
 // §2.4.2.1
