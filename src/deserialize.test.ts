@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
+import { PrimitiveTypeEnumeration } from "./enums.js";
 import type { NrbfMethodCall, NrbfMethodReturn, NrbfObject } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
@@ -219,6 +220,74 @@ describe("deserialize", () => {
       expect(result.typeName).toBe("Point");
       expect(result.members["x"]).toBe(3);
       expect(result.members["y"]).toBe(4);
+    });
+
+    it("handles three ClassWithId instances in an array — each gets independent member values", () => {
+      // ArraySingleObject(id=1, len=3): first element = SCWMT Point(id=2), next two = ClassWithId
+      const stream = buf(
+        header(1),
+        [0x10, ...i32(1), ...i32(3)],
+        [
+          0x04, ...i32(2), ...lps("Point"), ...i32(2), ...lps("x"), ...lps("y"),
+          0x00, 0x00, 0x08, 0x08,
+          ...i32(10), ...i32(20),                                         // id=2: x=10, y=20
+        ],
+        [0x01, ...i32(3), ...i32(2), ...i32(30), ...i32(40)],            // id=3: x=30, y=40
+        [0x01, ...i32(4), ...i32(2), ...i32(50), ...i32(60)],            // id=4: x=50, y=60
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject[];
+      expect(result).toHaveLength(3);
+      expect(result[0]!.typeName).toBe("Point");
+      expect(result[0]!.members["x"]).toBe(10);
+      expect(result[0]!.members["y"]).toBe(20);
+      expect(result[1]!.members["x"]).toBe(30);
+      expect(result[1]!.members["y"]).toBe(40);
+      expect(result[2]!.members["x"]).toBe(50);
+      expect(result[2]!.members["y"]).toBe(60);
+    });
+
+    it("propagates memberTypes from the class definition to all ClassWithId instances", () => {
+      // SCWMT "Range" with Byte and Int32 members, followed by a ClassWithId with different values
+      const stream = buf(
+        header(1),
+        [0x10, ...i32(1), ...i32(2)],
+        [
+          0x04, ...i32(2), ...lps("Range"), ...i32(2), ...lps("lo"), ...lps("hi"),
+          0x00, 0x00, 0x02, 0x08,                // BinaryType: Primitive, Primitive; PT: Byte(2), Int32(8)
+          0xff,                                   // lo = 255 (Byte, 1 byte)
+          ...i32(100),                            // hi = 100 (Int32)
+        ],
+        [0x01, ...i32(3), ...i32(2), 0x01, ...i32(200)],  // ClassWithId: lo=1, hi=200
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject[];
+      expect(result[0]!.typeName).toBe("Range");
+      expect(result[0]!.memberTypes?.["lo"]).toBe(PrimitiveTypeEnumeration.Byte);
+      expect(result[0]!.memberTypes?.["hi"]).toBe(PrimitiveTypeEnumeration.Int32);
+      expect(result[1]!.memberTypes?.["lo"]).toBe(PrimitiveTypeEnumeration.Byte);
+      expect(result[1]!.memberTypes?.["hi"]).toBe(PrimitiveTypeEnumeration.Int32);
+      expect(result[1]!.members["lo"]).toBe(1);
+      expect(result[1]!.members["hi"]).toBe(200);
+    });
+
+    it("propagates libraryName from BinaryLibrary + ClassWithMembersAndTypes to ClassWithId", () => {
+      // BinaryLibrary must appear at top level (before the array), not interleaved with elements
+      const stream = buf(
+        header(1),
+        [0x0c, ...i32(5), ...lps("MyLib, Version=1.0.0.0")],
+        [0x10, ...i32(1), ...i32(2)],
+        [0x05, ...i32(2), ...lps("Dto"), ...i32(1), ...lps("id"), 0x00, 0x08, ...i32(5), ...i32(99)],
+        [0x01, ...i32(3), ...i32(2), ...i32(42)],
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject[];
+      expect(result[0]!.typeName).toBe("Dto");
+      expect(result[0]!.libraryName).toBe("MyLib, Version=1.0.0.0");
+      expect(result[0]!.members["id"]).toBe(99);
+      expect(result[1]!.typeName).toBe("Dto");
+      expect(result[1]!.libraryName).toBe("MyLib, Version=1.0.0.0");
+      expect(result[1]!.members["id"]).toBe(42);
     });
   });
 

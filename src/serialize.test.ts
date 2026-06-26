@@ -158,6 +158,61 @@ describe("serialize", () => {
       expect(result[0]!.members["x"]).toBe(1);
       expect(result[1]!.members["x"]).toBe(3);
     });
+
+    it("emits ClassWithId byte for the second instance (not a fresh SystemClassWithMembersAndTypes)", () => {
+      const p1: NrbfObject = { typeName: "Point", members: { x: 1, y: 2 } };
+      const p2: NrbfObject = { typeName: "Point", members: { x: 3, y: 4 } };
+      const buf = serialize([p1, p2]);
+      // Layout: header(17) + BinaryArray(Single,SystemClass)(21) + SCWMT Point(31) = 69
+      // BinaryArray: 1(type)+4(id)+1(arrayType)+4(rank)+4(len)+1(binaryType)+6(LPS"Point") = 21
+      // SCWMT Point: 1+4+6+4+2+2+1+1+1+1+4+4 = 31
+      expect(buf[69]).toBe(RecordTypeEnumeration.ClassWithId);
+      expect(buf.readInt32LE(70)).toBe(3); // objectId for p2
+      expect(buf.readInt32LE(74)).toBe(2); // metadataId = p1's objectId
+    });
+
+    it("emits ClassWithId for every instance beyond the first (3 instances)", () => {
+      const make = (x: number): NrbfObject => ({ typeName: "Point", members: { x, y: 0 } });
+      const buf = serialize([make(1), make(2), make(3)]);
+      // ClassWithId(p2) at offset 69; ClassWithId(p3) = 69 + 1+4+4+4+4 = 69 + 17 = 86
+      expect(buf[69]).toBe(RecordTypeEnumeration.ClassWithId);
+      expect(buf[86]).toBe(RecordTypeEnumeration.ClassWithId);
+    });
+
+    it("each ClassWithId instance carries independent member values", () => {
+      const points = [1, 2, 3, 4, 5].map(
+        (n): NrbfObject => ({ typeName: "Point", members: { x: n, y: n * 10 } }),
+      );
+      const result = roundTrip(points) as NrbfObject[];
+      expect(result).toHaveLength(5);
+      for (let i = 0; i < 5; i++) {
+        expect(result[i]!.members["x"]).toBe(i + 1);
+        expect(result[i]!.members["y"]).toBe((i + 1) * 10);
+      }
+    });
+
+    it("reuses metadata for library-class instances (ClassWithMembersAndTypes → ClassWithId)", () => {
+      const make = (n: number): NrbfObject => ({ typeName: "Dto", libraryName: "MyLib", members: { id: n } });
+      const result = roundTrip([make(1), make(2), make(3)]) as NrbfObject[];
+      for (let i = 0; i < 3; i++) {
+        expect(result[i]!.typeName).toBe("Dto");
+        expect(result[i]!.libraryName).toBe("MyLib");
+        expect(result[i]!.members["id"]).toBe(i + 1);
+      }
+    });
+
+    it("ClassWithId preserves memberTypes on round-trip", () => {
+      const make = (n: number): NrbfObject => ({
+        typeName: "Range",
+        memberTypes: { lo: PrimitiveTypeEnumeration.Byte, hi: PrimitiveTypeEnumeration.Int32 },
+        members: { lo: n, hi: n * 100 },
+      });
+      const result = roundTrip([make(1), make(2)]) as NrbfObject[];
+      expect(result[0]!.memberTypes?.["lo"]).toBe(PrimitiveTypeEnumeration.Byte);
+      expect(result[1]!.memberTypes?.["lo"]).toBe(PrimitiveTypeEnumeration.Byte);
+      expect(result[1]!.members["lo"]).toBe(2);
+      expect(result[1]!.members["hi"]).toBe(200);
+    });
   });
 
   describe("MemberReference (shared objects)", () => {
