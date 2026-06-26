@@ -754,6 +754,72 @@ describe("serialize", () => {
       expect(result.args).toEqual(original.args);
       expect(result.callContext).toEqual(original.callContext);
     });
+
+    it("round-trips methodSignature without args (MethodSignatureInArray only)", () => {
+      const sigEntry = { typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: "System.String", UnityType: 9 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Greet",
+        typeName: "IService",
+        methodSignature: [sigEntry],
+      };
+      const result = roundTripCall(call);
+      expect(result.methodSignature).toHaveLength(1);
+      expect(result.methodSignature![0]).toMatchObject({ typeName: "System.UnitySerializationHolder", members: { Data: "System.String", UnityType: 9 } });
+    });
+
+    it("round-trips methodSignature with complex args (ArgsIsArray + MethodSignatureInArray)", () => {
+      const sigEntry = { typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: "MyLib.Payload", UnityType: 4 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Send",
+        typeName: "IService",
+        args: [{ typeName: "Payload", libraryName: "MyLib", members: { value: 42 } }],
+        methodSignature: [sigEntry],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ typeName: "Payload", members: { value: 42 } }]);
+      expect(result.methodSignature).toHaveLength(1);
+      expect(result.methodSignature![0]).toMatchObject({ typeName: "System.UnitySerializationHolder", members: { Data: "MyLib.Payload", UnityType: 4 } });
+    });
+
+    it("round-trips methodSignature with object callContext (MethodSignatureInArray + ContextInArray)", () => {
+      const sigEntry = { typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: "System.Int32", UnityType: 9 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        methodSignature: [sigEntry],
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "ctx-99" } },
+      };
+      const result = roundTripCall(call);
+      expect(result.methodSignature).toHaveLength(1);
+      expect(result.methodSignature![0]).toMatchObject({ members: { Data: "System.Int32" } });
+      expect(result.callContext).toMatchObject({ members: { id: "ctx-99" } });
+    });
+
+    it("round-trips methodSignature with complex args, object callContext, and messageProperties", () => {
+      const makeSig = (data: string) => ({ typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: data, UnityType: 9 } });
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Process",
+        typeName: "IWorker",
+        args: [
+          { typeName: "Item", libraryName: "Lib", members: { id: 1 } },
+          { typeName: "Options", libraryName: "Lib", members: { flag: true } },
+        ],
+        methodSignature: [makeSig("Lib.Item"), makeSig("Lib.Options")],
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { traceId: "abc" } },
+        messageProperties: [{ typeName: "Prop", libraryName: "Lib", members: { key: "val" } }],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ members: { id: 1 } }, { members: { flag: true } }]);
+      expect(result.methodSignature).toHaveLength(2);
+      expect(result.methodSignature![0]).toMatchObject({ members: { Data: "Lib.Item" } });
+      expect(result.methodSignature![1]).toMatchObject({ members: { Data: "Lib.Options" } });
+      expect(result.callContext).toMatchObject({ members: { traceId: "abc" } });
+      expect(result.messageProperties).toMatchObject([{ members: { key: "val" } }]);
+    });
   });
 
   describe("NrbfMethodReturn", () => {

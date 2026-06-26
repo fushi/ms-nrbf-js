@@ -440,6 +440,7 @@ class Deserializer {
       (messageEnum & MessageFlags.ArgsIsArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
       (messageEnum & MessageFlags.ContextInArray) ||
+      (messageEnum & MessageFlags.MethodSignatureInArray) ||
       (messageEnum & MessageFlags.PropertiesInArray)
     ) {
       this.readCallArray(messageEnum, result);
@@ -487,10 +488,13 @@ class Deserializer {
 
     if (result.kind === "MethodCall") {
       if (messageEnum & MessageFlags.ArgsIsArray) {
-        // With ArgsIsArray, each arg is a direct element followed by optional context and properties.
+        // With ArgsIsArray, each arg is a direct element. Order per §2.2.3.2:
+        // args (direct), GenericMethod, MethodSignature, CallContext, MessageProperties.
         const hasCtx = !!(messageEnum & MessageFlags.ContextInArray);
         const hasProps = !!(messageEnum & MessageFlags.PropertiesInArray);
-        const argCount = length - (hasCtx ? 1 : 0) - (hasProps ? 1 : 0);
+        const hasSig = !!(messageEnum & MessageFlags.MethodSignatureInArray);
+        const hasGeneric = !!(messageEnum & MessageFlags.GenericMethod);
+        const argCount = length - (hasGeneric ? 1 : 0) - (hasSig ? 1 : 0) - (hasCtx ? 1 : 0) - (hasProps ? 1 : 0);
         const argSlice: NrbfValue[] = [];
         for (let i = 0; i < argCount; i++) {
           const idx = i;
@@ -499,6 +503,16 @@ class Deserializer {
           argSlice.push(val);
         }
         result.args = argSlice;
+        if (hasGeneric) {
+          const idx = arr.length;
+          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        }
+        if (hasSig) {
+          const sigIdx = arr.length;
+          const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
+          arr.push(sig);
+          if (Array.isArray(sig)) result.methodSignature = sig;
+        }
         if (hasCtx) {
           const ctxIdx = arr.length;
           const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
@@ -512,7 +526,8 @@ class Deserializer {
           if (Array.isArray(val)) result.messageProperties = val;
         }
       } else if (messageEnum & MessageFlags.ArgsInArray) {
-        // Element 0 is the nested args sub-array.
+        // Element 0 is the nested args sub-array. Order per §2.2.3.2:
+        // ArgsInArray, GenericMethod, MethodSignature, CallContext, MessageProperties.
         {
           const idx = 0;
           const val = this.readReferenceableValue((v) => {
@@ -522,7 +537,16 @@ class Deserializer {
           arr.push(val);
           if (Array.isArray(val)) result.args = val;
         }
-        // Element 1 (if ContextInArray) is the call context object.
+        if (messageEnum & MessageFlags.GenericMethod) {
+          const idx = arr.length;
+          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+        }
+        if (messageEnum & MessageFlags.MethodSignatureInArray) {
+          const sigIdx = arr.length;
+          const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
+          arr.push(sig);
+          if (Array.isArray(sig)) result.methodSignature = sig;
+        }
         if (messageEnum & MessageFlags.ContextInArray) {
           const ctxIdx = arr.length;
           const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
@@ -540,7 +564,13 @@ class Deserializer {
           arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
         }
       } else {
-        // ContextInArray (and/or PropertiesInArray) with no arg flags set.
+        // MethodSignatureInArray and/or ContextInArray and/or PropertiesInArray with no arg flags.
+        if (messageEnum & MessageFlags.MethodSignatureInArray) {
+          const sigIdx = arr.length;
+          const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
+          arr.push(sig);
+          if (Array.isArray(sig)) result.methodSignature = sig;
+        }
         if (messageEnum & MessageFlags.ContextInArray) {
           const ctxIdx = arr.length;
           const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
