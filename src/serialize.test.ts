@@ -666,5 +666,86 @@ describe("serialize", () => {
       expect(result.exception).toMatchObject({ typeName: "System.Exception", members: { _message: "oops" } });
       expect(result.callContext).toBe("call-123");
     });
+
+    it("round-trips messageProperties alone (PropertiesInArray path)", () => {
+      const entry: NrbfObject = { typeName: "DictionaryEntry", members: { _key: "priority", _value: 1 } };
+      const ret: NrbfMethodReturn = { kind: "MethodReturn", messageProperties: [entry] };
+      const result = roundTripReturn(ret);
+      expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "priority", _value: 1 } }]);
+      expect(result.returnValue).toBeUndefined();
+    });
+
+    it("round-trips messageProperties alongside return value and callContext", () => {
+      const entry: NrbfObject = { typeName: "DictionaryEntry", members: { _key: "trace", _value: "abc" } };
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: 42,
+        callContext: "ctx-1",
+        messageProperties: [entry],
+      };
+      const result = roundTripReturn(ret);
+      expect(result.returnValue).toBe(42);
+      expect(result.callContext).toBe("ctx-1");
+      expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "trace", _value: "abc" } }]);
+    });
+
+    it("round-trips messageProperties alongside exception (PropertiesInArray + ExceptionInArray)", () => {
+      const entry: NrbfObject = { typeName: "DictionaryEntry", members: { _key: "reqId", _value: "x99" } };
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        exception: { typeName: "System.Exception", libraryName: "mscorlib", members: { _message: "fail" } },
+        messageProperties: [entry],
+      };
+      const result = roundTripReturn(ret);
+      expect(result.exception).toMatchObject({ typeName: "System.Exception", members: { _message: "fail" } });
+      expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "reqId", _value: "x99" } }]);
+    });
+  });
+
+  describe("NrbfMethodCall messageProperties", () => {
+    function roundTripCall(call: NrbfMethodCall): NrbfMethodCall {
+      return deserialize(serialize(call)) as NrbfMethodCall;
+    }
+
+    it("round-trips messageProperties alone (no args, no context)", () => {
+      const entry: NrbfObject = { typeName: "DictionaryEntry", members: { _key: "env", _value: "prod" } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Ping",
+        typeName: "IService",
+        messageProperties: [entry],
+      };
+      const result = roundTripCall(call);
+      expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "env", _value: "prod" } }]);
+      expect(result.args).toBeUndefined();
+    });
+
+    it("round-trips messageProperties with complex args (ArgsIsArray + PropertiesInArray)", () => {
+      const entry: NrbfObject = { typeName: "DictionaryEntry", members: { _key: "k", _value: "v" } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Send",
+        typeName: "IService",
+        args: [{ typeName: "Payload", members: { id: 7 } }],
+        messageProperties: [entry],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ typeName: "Payload", members: { id: 7 } }]);
+      expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "k", _value: "v" } }]);
+    });
+
+    it("round-trips messageProperties with NrbfObject callContext (ContextInArray + PropertiesInArray)", () => {
+      const entry: NrbfObject = { typeName: "DictionaryEntry", members: { _key: "tid", _value: "t1" } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        callContext: { typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext", libraryName: "mscorlib", members: { id: "ctx" } },
+        messageProperties: [entry],
+      };
+      const result = roundTripCall(call);
+      expect(result.callContext).toMatchObject({ members: { id: "ctx" } });
+      expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "tid", _value: "t1" } }]);
+    });
   });
 });

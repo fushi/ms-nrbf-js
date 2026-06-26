@@ -437,7 +437,8 @@ class Deserializer {
     } else if (
       (messageEnum & MessageFlags.ArgsIsArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
-      (messageEnum & MessageFlags.ContextInArray)
+      (messageEnum & MessageFlags.ContextInArray) ||
+      (messageEnum & MessageFlags.PropertiesInArray)
     ) {
       this.readCallArray(messageEnum, result);
     }
@@ -456,7 +457,8 @@ class Deserializer {
       (messageEnum & MessageFlags.ReturnValueInArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
       (messageEnum & MessageFlags.ExceptionInArray) ||
-      (messageEnum & MessageFlags.ContextInArray)
+      (messageEnum & MessageFlags.ContextInArray) ||
+      (messageEnum & MessageFlags.PropertiesInArray)
     ) {
       this.readCallArray(messageEnum, result);
     }
@@ -483,30 +485,29 @@ class Deserializer {
 
     if (result.kind === "MethodCall") {
       if (messageEnum & MessageFlags.ArgsIsArray) {
-        // With ArgsIsArray, each arg is a direct element. If ContextInArray is also set,
-        // the context object follows the args as the last element.
+        // With ArgsIsArray, each arg is a direct element followed by optional context and properties.
         const hasCtx = !!(messageEnum & MessageFlags.ContextInArray);
-        const argCount = hasCtx ? length - 1 : length;
+        const hasProps = !!(messageEnum & MessageFlags.PropertiesInArray);
+        const argCount = length - (hasCtx ? 1 : 0) - (hasProps ? 1 : 0);
+        const argSlice: NrbfValue[] = [];
+        for (let i = 0; i < argCount; i++) {
+          const idx = i;
+          const val = this.readReferenceableValue((v) => { arr[idx] = v; argSlice[idx] = v; });
+          arr.push(val);
+          argSlice.push(val);
+        }
+        result.args = argSlice;
         if (hasCtx) {
-          // Need a separate array so the context element is not included in result.args.
-          const argSlice: NrbfValue[] = [];
-          for (let i = 0; i < argCount; i++) {
-            const idx = i;
-            const val = this.readReferenceableValue((v) => { arr[idx] = v; argSlice[idx] = v; });
-            arr.push(val);
-            argSlice.push(val);
-          }
-          result.args = argSlice;
           const ctxIdx = arr.length;
           const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
           arr.push(ctx);
           result.callContext = ctx as string | NrbfObject;
-        } else {
-          for (let i = 0; i < argCount; i++) {
-            const idx = i;
-            arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
-          }
-          result.args = arr;
+        }
+        if (hasProps) {
+          const propsIdx = arr.length;
+          const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+          arr.push(val);
+          if (Array.isArray(val)) result.messageProperties = val;
         }
       } else if (messageEnum & MessageFlags.ArgsInArray) {
         // Element 0 is the nested args sub-array.
@@ -526,16 +527,30 @@ class Deserializer {
           arr.push(ctx);
           result.callContext = ctx as string | NrbfObject;
         }
+        if (messageEnum & MessageFlags.PropertiesInArray) {
+          const propsIdx = arr.length;
+          const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+          arr.push(val);
+          if (Array.isArray(val)) result.messageProperties = val;
+        }
         while (arr.length < length) {
           const idx = arr.length;
           arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
         }
       } else {
-        // ContextInArray only — element 0 is the call context object.
-        const ctxIdx = arr.length;
-        const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
-        arr.push(ctx);
-        result.callContext = ctx as string | NrbfObject;
+        // ContextInArray (and/or PropertiesInArray) with no arg flags set.
+        if (messageEnum & MessageFlags.ContextInArray) {
+          const ctxIdx = arr.length;
+          const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
+          arr.push(ctx);
+          result.callContext = ctx as string | NrbfObject;
+        }
+        if (messageEnum & MessageFlags.PropertiesInArray) {
+          const propsIdx = arr.length;
+          const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+          arr.push(val);
+          if (Array.isArray(val)) result.messageProperties = val;
+        }
         while (arr.length < length) {
           const idx = arr.length;
           arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
@@ -570,7 +585,13 @@ class Deserializer {
         arr.push(ctx);
         result.callContext = ctx as string | NrbfObject;
       }
-      // Consume remaining elements (PropertiesInArray, etc.).
+      if (messageEnum & MessageFlags.PropertiesInArray) {
+        const propsIdx = arr.length;
+        const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+        arr.push(val);
+        if (Array.isArray(val)) result.messageProperties = val;
+      }
+      // Consume remaining elements (unsupported flags like GenericMethod).
       while (arr.length < length) {
         const idx = arr.length;
         arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));

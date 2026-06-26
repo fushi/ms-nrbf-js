@@ -81,6 +81,7 @@ export interface NrbfMethodCall {
   typeName: string;
   callContext?: string | NrbfObject;
   args?: NrbfValue[];
+  messageProperties?: NrbfValue[];
 }
 
 export interface NrbfMethodReturn {
@@ -89,6 +90,7 @@ export interface NrbfMethodReturn {
   exception?: NrbfObject;
   callContext?: string | NrbfObject;
   args?: NrbfValue[];
+  messageProperties?: NrbfValue[];
 }
 
 // Top-level return type of deserialize()
