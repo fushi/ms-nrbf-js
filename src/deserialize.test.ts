@@ -431,5 +431,48 @@ describe("deserialize", () => {
       expect(sparse[11]).toBe("last");
       expect(sparse[1]).toBeNull();
     });
+
+    it("return_value_inline_null.nrbf — ReturnValueInline with Null ValueWithCode", () => {
+      const result = deserialize(readFileSync(join(fixturesDir, "return_value_inline_null.nrbf"))) as NrbfMethodReturn;
+      expect(result.kind).toBe("MethodReturn");
+      expect(result.returnValue).toBeNull();
+      expect(result.args).toBeUndefined();
+      expect(result.callContext).toBeUndefined();
+    });
+
+    it("exception_in_array.nrbf — ExceptionInArray path in MethodReturnCallArray", () => {
+      const result = deserialize(readFileSync(join(fixturesDir, "exception_in_array.nrbf"))) as NrbfMethodReturn;
+      expect(result.kind).toBe("MethodReturn");
+      expect(result.exception).toMatchObject({
+        typeName: "System.Exception",
+        libraryName: "mscorlib",
+        members: { _message: "test error" },
+      });
+      expect(result.returnValue).toBeUndefined();
+      expect(result.args).toBeUndefined();
+    });
+
+    it("context_in_array_call.nrbf — ContextInArray-only path in MethodCallArray", () => {
+      const result = deserialize(readFileSync(join(fixturesDir, "context_in_array_call.nrbf"))) as NrbfMethodCall;
+      expect(result.kind).toBe("MethodCall");
+      expect(result.methodName).toBe("Ping");
+      expect(result.typeName).toBe("IService");
+      expect(result.args).toBeUndefined();
+      expect(result.callContext).toMatchObject({
+        typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext",
+        libraryName: "mscorlib",
+        members: { id: "ctx-42" },
+      });
+    });
+
+    it("return_and_context_in_array.nrbf — ReturnValueInArray + ContextInArray path", () => {
+      const result = deserialize(readFileSync(join(fixturesDir, "return_and_context_in_array.nrbf"))) as NrbfMethodReturn;
+      expect(result.kind).toBe("MethodReturn");
+      expect(result.returnValue).toMatchObject({ typeName: "Result", members: { code: 42, message: "ok" } });
+      expect(result.callContext).toMatchObject({
+        typeName: "System.Runtime.Remoting.Messaging.LogicalCallContext",
+        members: { id: "r-ctx" },
+      });
+    });
   });
 });
