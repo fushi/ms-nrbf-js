@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { deserialize } from "./deserialize.js";
 import { serialize } from "./serialize.js";
-import { PrimitiveTypeEnumeration, RecordTypeEnumeration } from "./enums.js";
+import { MessageFlags, PrimitiveTypeEnumeration, RecordTypeEnumeration } from "./enums.js";
 import type { DateTime, NrbfMethodCall, NrbfMethodReturn, NrbfObject, NrbfValue } from "./types.js";
 
 const fixturesDir = join(fileURLToPath(import.meta.url), "..", "__fixtures__");
@@ -591,10 +591,15 @@ describe("serialize", () => {
       expect(sparse[1]).toBeNull();
     });
 
-    it("byte-exact round-trip of return_value_inline_null.nrbf", () => {
+    it("semantic round-trip of return_value_inline_null.nrbf (ReturnValueInline(Null) → NoReturnValue)", () => {
+      // The fixture uses ReturnValueInline with PrimitiveType.Null — a valid but less precise
+      // encoding. The serializer now emits NoReturnValue instead, which is byte-inequivalent
+      // but semantically identical.
       const buf = readFileSync(join(fixturesDir, "return_value_inline_null.nrbf"));
-      const reserialized = serialize(deserialize(buf));
-      expect(reserialized).toEqual(buf);
+      const deserialized = deserialize(buf) as NrbfMethodReturn;
+      expect(deserialized.returnValue).toBeNull();
+      const reserialized = deserialize(serialize(deserialized)) as NrbfMethodReturn;
+      expect(reserialized.returnValue).toBeNull();
     });
 
     it("byte-exact round-trip of exception_in_array.nrbf", () => {
@@ -894,8 +899,16 @@ describe("serialize", () => {
       expect(result.returnValue).toBe(99);
     });
 
-    it("round-trips with null return value", () => {
+    it("round-trips with null return value (NoReturnValue flag)", () => {
       const ret: NrbfMethodReturn = { kind: "MethodReturn", returnValue: null };
+      const buf = serialize(ret);
+      // Verify NoReturnValue flag (0x0200) is set in the 4-byte MessageEnum after the
+      // MethodReturn record-type byte. flags = NoReturnValue|NoContext|NoArgs = 0x0211.
+      const methodReturnOffset = buf.indexOf(RecordTypeEnumeration.MethodReturn);
+      const flags = buf.readInt32LE(methodReturnOffset + 1);
+      expect(flags & MessageFlags.NoReturnValue).toBeTruthy();
+      expect(flags & MessageFlags.ReturnValueInline).toBeFalsy();
+      expect(flags & MessageFlags.ReturnValueVoid).toBeFalsy();
       const result = roundTripReturn(ret);
       expect(result.returnValue).toBeNull();
     });
@@ -1048,6 +1061,90 @@ describe("serialize", () => {
       const result = roundTripReturn(ret);
       expect(result.exception).toMatchObject({ typeName: "System.Exception", members: { _message: "fail" } });
       expect(result.messageProperties).toMatchObject([{ typeName: "DictionaryEntry", members: { _key: "reqId", _value: "x99" } }]);
+    });
+  });
+
+  describe("ValueWithCode primitive type precision (argTypes / returnType)", () => {
+    it("preserves Single return value without precision loss", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: 1.5,
+        returnType: PrimitiveTypeEnumeration.Single,
+      };
+      const buf = serialize(ret);
+      const result = deserialize(buf) as NrbfMethodReturn;
+      expect(result.returnValue).toBe(1.5);
+      expect(result.returnType).toBe(PrimitiveTypeEnumeration.Single);
+      // Re-serialize should still use Single, not Double.
+      const buf2 = serialize(result);
+      expect(buf2).toEqual(buf);
+    });
+
+    it("preserves UInt32 arg that exceeds Int32 range", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: [4_000_000_000],
+        argTypes: [PrimitiveTypeEnumeration.UInt32],
+      };
+      const buf = serialize(call);
+      const result = deserialize(buf) as NrbfMethodCall;
+      expect(result.args![0]).toBe(4_000_000_000);
+      expect(result.argTypes![0]).toBe(PrimitiveTypeEnumeration.UInt32);
+      expect(serialize(result)).toEqual(buf);
+    });
+
+    it("preserves Char arg (distinct from String)", () => {
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: ["A"],
+        argTypes: [PrimitiveTypeEnumeration.Char],
+      };
+      const buf = serialize(call);
+      const result = deserialize(buf) as NrbfMethodCall;
+      expect(result.args![0]).toBe("A");
+      expect(result.argTypes![0]).toBe(PrimitiveTypeEnumeration.Char);
+      expect(serialize(result)).toEqual(buf);
+    });
+
+    it("preserves UInt64 output arg in MethodReturn", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        args: [18_446_744_073_709_551_615n],
+        argTypes: [PrimitiveTypeEnumeration.UInt64],
+      };
+      const buf = serialize(ret);
+      const result = deserialize(buf) as NrbfMethodReturn;
+      expect(result.args![0]).toBe(18_446_744_073_709_551_615n);
+      expect(result.argTypes![0]).toBe(PrimitiveTypeEnumeration.UInt64);
+      expect(serialize(result)).toEqual(buf);
+    });
+
+    it("deserializer populates argTypes from ArgsInline stream", () => {
+      // Build a stream with Single + UInt32 args using known argTypes.
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: [3.14, 3_000_000_000],
+        argTypes: [PrimitiveTypeEnumeration.Single, PrimitiveTypeEnumeration.UInt32],
+      };
+      const result = deserialize(serialize(call)) as NrbfMethodCall;
+      expect(result.argTypes).toEqual([PrimitiveTypeEnumeration.Single, PrimitiveTypeEnumeration.UInt32]);
+    });
+
+    it("deserializer populates returnType from ReturnValueInline stream", () => {
+      const ret: NrbfMethodReturn = {
+        kind: "MethodReturn",
+        returnValue: 2.5,
+        returnType: PrimitiveTypeEnumeration.Single,
+      };
+      const result = deserialize(serialize(ret)) as NrbfMethodReturn;
+      expect(result.returnType).toBe(PrimitiveTypeEnumeration.Single);
+      expect(result.returnValue).toBe(2.5);
     });
   });
 

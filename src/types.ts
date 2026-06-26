@@ -81,6 +81,10 @@ export interface NrbfMethodCall {
   typeName: string;
   callContext?: string | NrbfObject;
   args?: NrbfValue[];
+  // Primitive type for each inline (ArgsInline) arg — preserves types that JS cannot distinguish,
+  // e.g. Single vs Double, Char vs String, UInt32 vs Int32. Populated by the deserializer;
+  // used by the serializer when present.
+  argTypes?: PrimitiveTypeEnumeration[];
   genericTypeArguments?: NrbfValue[];
   methodSignature?: NrbfValue[];
   messageProperties?: NrbfValue[];
@@ -89,9 +93,13 @@ export interface NrbfMethodCall {
 export interface NrbfMethodReturn {
   kind: "MethodReturn";
   returnValue?: NrbfValue;
+  // Primitive type for an inline (ReturnValueInline) return value. Same purpose as argTypes.
+  returnType?: PrimitiveTypeEnumeration;
   exception?: NrbfObject;
   callContext?: string | NrbfObject;
   args?: NrbfValue[];
+  // Primitive type for each inline (ArgsInline) output arg. Same purpose as argTypes on MethodCall.
+  argTypes?: PrimitiveTypeEnumeration[];
   messageProperties?: NrbfValue[];
 }
 

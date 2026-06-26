@@ -435,7 +435,9 @@ class Deserializer {
     const result: NrbfMethodCall = { kind: "MethodCall", methodName, typeName };
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
     if (messageEnum & MessageFlags.ArgsInline) {
-      result.args = this.readArrayOfValueWithCode();
+      const [values, types] = this.readArrayOfValueWithCodeTyped();
+      result.args = values;
+      result.argTypes = types;
     } else if (
       (messageEnum & MessageFlags.ArgsIsArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
@@ -452,11 +454,17 @@ class Deserializer {
   private readBinaryMethodReturn(): NrbfMethodReturn {
     const messageEnum = this.r.readInt32();
     const result: NrbfMethodReturn = { kind: "MethodReturn" };
-    if (messageEnum & MessageFlags.ReturnValueInline) result.returnValue = this.readValueWithCode();
+    if (messageEnum & MessageFlags.ReturnValueInline) {
+      const [value, type] = this.readValueWithCodeAndType();
+      result.returnValue = value;
+      result.returnType = type;
+    }
     if (messageEnum & MessageFlags.NoReturnValue) result.returnValue = null;
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
     if (messageEnum & MessageFlags.ArgsInline) {
-      result.args = this.readArrayOfValueWithCode();
+      const [values, types] = this.readArrayOfValueWithCodeTyped();
+      result.args = values;
+      result.argTypes = types;
     } else if (
       (messageEnum & MessageFlags.ReturnValueInArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
@@ -649,18 +657,30 @@ class Deserializer {
   }
 
   // §2.2.2.1 — PrimitiveTypeEnum + optional value (absent when Null)
+  private readValueWithCodeAndType(): [NrbfValue, PrimitiveTypeEnumeration] {
+    const type = this.r.readByte() as PrimitiveTypeEnumeration;
+    return [type === PrimitiveTypeEnumeration.Null ? null : this.r.readPrimitive(type), type];
+  }
+
   private readValueWithCode(): NrbfValue {
-    const primitiveType = this.r.readByte() as PrimitiveTypeEnumeration;
-    if (primitiveType === PrimitiveTypeEnumeration.Null) return null;
-    return this.r.readPrimitive(primitiveType);
+    return this.readValueWithCodeAndType()[0];
   }
 
   // §2.2.2.3 — INT32 count + count × ValueWithCode
-  private readArrayOfValueWithCode(): NrbfValue[] {
+  private readArrayOfValueWithCodeTyped(): [NrbfValue[], PrimitiveTypeEnumeration[]] {
     const count = this.r.readInt32();
-    const arr: NrbfValue[] = [];
-    for (let i = 0; i < count; i++) arr.push(this.readValueWithCode());
-    return arr;
+    const values: NrbfValue[] = [];
+    const types: PrimitiveTypeEnumeration[] = [];
+    for (let i = 0; i < count; i++) {
+      const [v, t] = this.readValueWithCodeAndType();
+      values.push(v);
+      types.push(t);
+    }
+    return [values, types];
+  }
+
+  private readArrayOfValueWithCode(): NrbfValue[] {
+    return this.readArrayOfValueWithCodeTyped()[0];
   }
 }
 

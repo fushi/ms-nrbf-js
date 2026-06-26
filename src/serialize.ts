@@ -200,7 +200,7 @@ class Serializer {
     this.writeStringValueWithCode(call.methodName);
     this.writeStringValueWithCode(call.typeName);
     if (call.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(call.callContext as string);
-    if (!hasComplexArgs && call.args !== undefined) this.writeArrayOfValueWithCode(call.args);
+    if (!hasComplexArgs && call.args !== undefined) this.writeArrayOfValueWithCode(call.args, call.argTypes);
 
     if (needsCallArray && callArrayId !== undefined) {
       // §2.2.3.2 MethodCallArray order: args (direct for ArgsIsArray), GenericTypeArgs, MethodSignature, CallContext, MessageProperties.
@@ -250,8 +250,8 @@ class Serializer {
     } else {
       flags |= ret.args === undefined ? MessageFlags.NoArgs
         : hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
-      flags |= ret.returnValue === undefined
-        ? MessageFlags.ReturnValueVoid
+      flags |= ret.returnValue === undefined ? MessageFlags.ReturnValueVoid
+        : ret.returnValue === null ? MessageFlags.NoReturnValue
         : hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline;
     }
     flags |= ret.callContext !== undefined
@@ -272,9 +272,9 @@ class Serializer {
 
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
     this.w.writeInt32(flags);
-    if (!hasException && ret.returnValue !== undefined && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
+    if (!hasException && ret.returnValue !== undefined && ret.returnValue !== null && !hasComplexReturn) this.writeValueWithCode(ret.returnValue, ret.returnType);
     if (ret.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(ret.callContext as string);
-    if (!hasException && ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args);
+    if (!hasException && ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args, ret.argTypes);
 
     if (needsCallArray && callArrayId !== undefined) {
       // MethodReturnCallArray order: ReturnValue, OutputArguments, Exception, CallContext, Properties (§2.2.3.4).
@@ -299,15 +299,15 @@ class Serializer {
     this.w.writeLengthPrefixedString(s);
   }
 
-  private writeValueWithCode(v: NrbfValue): void {
-    const pt = inferValueWithCodeType(v);
+  private writeValueWithCode(v: NrbfValue, typeHint?: PrimitiveTypeEnumeration): void {
+    const pt = typeHint ?? inferValueWithCodeType(v);
     this.w.writeByte(pt);
     if (pt !== PrimitiveTypeEnumeration.Null) this.w.writePrimitive(pt, v as PrimitiveValue);
   }
 
-  private writeArrayOfValueWithCode(arr: NrbfValue[]): void {
+  private writeArrayOfValueWithCode(arr: NrbfValue[], typeHints?: PrimitiveTypeEnumeration[]): void {
     this.w.writeInt32(arr.length);
-    for (const v of arr) this.writeValueWithCode(v);
+    for (let i = 0; i < arr.length; i++) this.writeValueWithCode(arr[i] ?? null, typeHints?.[i]);
   }
 
   private collectLibraries(value: NrbfValue, seen: Set<object>): void {
