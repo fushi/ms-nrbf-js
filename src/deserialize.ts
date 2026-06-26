@@ -448,6 +448,7 @@ class Deserializer {
     const messageEnum = this.r.readInt32();
     const result: NrbfMethodReturn = { kind: "MethodReturn" };
     if (messageEnum & MessageFlags.ReturnValueInline) result.returnValue = this.readValueWithCode();
+    if (messageEnum & MessageFlags.NoReturnValue) result.returnValue = null;
     if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
     if (messageEnum & MessageFlags.ArgsInline) {
       result.args = this.readArrayOfValueWithCode();

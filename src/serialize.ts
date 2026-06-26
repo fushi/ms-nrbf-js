@@ -234,9 +234,10 @@ class Serializer {
     } else {
       flags |= ret.args === undefined ? MessageFlags.NoArgs
         : hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
-      flags |= ret.returnValue !== undefined
-        ? hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline
-        : MessageFlags.ReturnValueVoid;
+      flags |= ret.returnValue === null ? MessageFlags.NoReturnValue
+        : ret.returnValue !== undefined
+          ? hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline
+          : MessageFlags.ReturnValueVoid;
     }
     flags |= ret.callContext !== undefined
       ? ctxIsObject ? MessageFlags.ContextInArray : MessageFlags.ContextInline
@@ -255,7 +256,7 @@ class Serializer {
 
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
     this.w.writeInt32(flags);
-    if (!hasException && ret.returnValue !== undefined && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
+    if (!hasException && ret.returnValue !== undefined && ret.returnValue !== null && !hasComplexReturn) this.writeValueWithCode(ret.returnValue);
     if (ret.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(ret.callContext as string);
     if (!hasException && ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args);
 
