@@ -440,6 +440,7 @@ class Deserializer {
       (messageEnum & MessageFlags.ArgsIsArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
       (messageEnum & MessageFlags.ContextInArray) ||
+      (messageEnum & MessageFlags.GenericMethod) ||
       (messageEnum & MessageFlags.MethodSignatureInArray) ||
       (messageEnum & MessageFlags.PropertiesInArray)
     ) {
@@ -504,8 +505,10 @@ class Deserializer {
         }
         result.args = argSlice;
         if (hasGeneric) {
-          const idx = arr.length;
-          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+          const genIdx = arr.length;
+          const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
+          arr.push(gen);
+          if (Array.isArray(gen)) result.genericTypeArguments = gen;
         }
         if (hasSig) {
           const sigIdx = arr.length;
@@ -538,8 +541,10 @@ class Deserializer {
           if (Array.isArray(val)) result.args = val;
         }
         if (messageEnum & MessageFlags.GenericMethod) {
-          const idx = arr.length;
-          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+          const genIdx = arr.length;
+          const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
+          arr.push(gen);
+          if (Array.isArray(gen)) result.genericTypeArguments = gen;
         }
         if (messageEnum & MessageFlags.MethodSignatureInArray) {
           const sigIdx = arr.length;
@@ -564,7 +569,13 @@ class Deserializer {
           arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
         }
       } else {
-        // MethodSignatureInArray and/or ContextInArray and/or PropertiesInArray with no arg flags.
+        // GenericMethod and/or MethodSignatureInArray and/or ContextInArray and/or PropertiesInArray with no arg flags.
+        if (messageEnum & MessageFlags.GenericMethod) {
+          const genIdx = arr.length;
+          const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
+          arr.push(gen);
+          if (Array.isArray(gen)) result.genericTypeArguments = gen;
+        }
         if (messageEnum & MessageFlags.MethodSignatureInArray) {
           const sigIdx = arr.length;
           const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
@@ -623,7 +634,7 @@ class Deserializer {
         arr.push(val);
         if (Array.isArray(val)) result.messageProperties = val;
       }
-      // Consume remaining elements (unsupported flags like GenericMethod).
+      // Drain any remaining elements.
       while (arr.length < length) {
         const idx = arr.length;
         arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));

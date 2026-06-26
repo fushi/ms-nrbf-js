@@ -81,6 +81,7 @@ export interface NrbfMethodCall {
   typeName: string;
   callContext?: string | NrbfObject;
   args?: NrbfValue[];
+  genericTypeArguments?: NrbfValue[];
   methodSignature?: NrbfValue[];
   messageProperties?: NrbfValue[];
 }

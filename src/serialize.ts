@@ -153,12 +153,14 @@ class Serializer {
     const hasComplexArgs =
       call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfObject(v));
     const ctxIsObject = call.callContext !== undefined && isNrbfObject(call.callContext);
+    const hasGeneric = call.genericTypeArguments !== undefined;
     const hasSig = call.methodSignature !== undefined;
-    const needsCallArray = hasComplexArgs || ctxIsObject || hasSig || call.messageProperties !== undefined;
+    const needsCallArray = hasComplexArgs || ctxIsObject || hasGeneric || hasSig || call.messageProperties !== undefined;
 
     if (needsCallArray) {
       const seen = new Set<object>();
       if (call.args) for (const arg of call.args) this.collectLibraries(arg as NrbfValue, seen);
+      if (hasGeneric) for (const el of call.genericTypeArguments!) this.collectLibraries(el, seen);
       if (ctxIsObject) this.collectLibraries(call.callContext as NrbfObject, seen);
       if (hasSig) for (const el of call.methodSignature!) this.collectLibraries(el, seen);
       if (call.messageProperties !== undefined) for (const el of call.messageProperties) this.collectLibraries(el, seen);
@@ -171,6 +173,9 @@ class Serializer {
     if (call.args !== undefined) {
       flags &= ~MessageFlags.NoArgs;
       flags |= hasComplexArgs ? MessageFlags.ArgsIsArray : MessageFlags.ArgsInline;
+    }
+    if (hasGeneric) {
+      flags |= MessageFlags.GenericMethod;
     }
     if (hasSig) {
       flags |= MessageFlags.MethodSignatureInArray;
@@ -198,15 +203,16 @@ class Serializer {
     if (!hasComplexArgs && call.args !== undefined) this.writeArrayOfValueWithCode(call.args);
 
     if (needsCallArray && callArrayId !== undefined) {
-      // §2.2.3.2 MethodCallArray order: args (direct for ArgsIsArray), MethodSignature, CallContext, MessageProperties.
+      // §2.2.3.2 MethodCallArray order: args (direct for ArgsIsArray), GenericTypeArgs, MethodSignature, CallContext, MessageProperties.
       const elementCount =
-        (hasComplexArgs ? call.args!.length : 0) + (hasSig ? 1 : 0) + (ctxIsObject ? 1 : 0) + (call.messageProperties !== undefined ? 1 : 0);
+        (hasComplexArgs ? call.args!.length : 0) + (hasGeneric ? 1 : 0) + (hasSig ? 1 : 0) + (ctxIsObject ? 1 : 0) + (call.messageProperties !== undefined ? 1 : 0);
       this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
       this.w.writeInt32(callArrayId);
       this.w.writeInt32(elementCount);
       if (hasComplexArgs && call.args !== undefined) {
         for (const arg of call.args) this.writeAnyValue(arg as NrbfValue);
       }
+      if (hasGeneric) this.writeAnyValue(call.genericTypeArguments! as NrbfValue);
       if (hasSig) this.writeAnyValue(call.methodSignature! as NrbfValue);
       if (ctxIsObject) this.writeAnyValue(call.callContext as NrbfObject);
       if (call.messageProperties !== undefined) this.writeAnyValue(call.messageProperties as NrbfValue);

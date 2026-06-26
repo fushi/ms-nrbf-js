@@ -755,6 +755,52 @@ describe("serialize", () => {
       expect(result.callContext).toEqual(original.callContext);
     });
 
+    it("round-trips genericTypeArguments without args (GenericMethod only)", () => {
+      const typeArg = { typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: "System.Int32", UnityType: 9 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M`1",
+        typeName: "IService",
+        genericTypeArguments: [typeArg],
+      };
+      const result = roundTripCall(call);
+      expect(result.genericTypeArguments).toHaveLength(1);
+      expect(result.genericTypeArguments![0]).toMatchObject({ typeName: "System.UnitySerializationHolder", members: { Data: "System.Int32", UnityType: 9 } });
+    });
+
+    it("round-trips genericTypeArguments with complex args (ArgsIsArray + GenericMethod)", () => {
+      const typeArg = { typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: "MyLib.Payload", UnityType: 4 } };
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Send`1",
+        typeName: "IService",
+        args: [{ typeName: "Payload", libraryName: "MyLib", members: { value: 99 } }],
+        genericTypeArguments: [typeArg],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ typeName: "Payload", members: { value: 99 } }]);
+      expect(result.genericTypeArguments).toHaveLength(1);
+      expect(result.genericTypeArguments![0]).toMatchObject({ members: { Data: "MyLib.Payload" } });
+    });
+
+    it("round-trips genericTypeArguments with methodSignature (GenericMethod + MethodSignatureInArray)", () => {
+      const makeHolder = (data: string) => ({ typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: data, UnityType: 9 } });
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "Process`1",
+        typeName: "IWorker",
+        args: [{ typeName: "Item", libraryName: "Lib", members: { id: 7 } }],
+        genericTypeArguments: [makeHolder("System.String")],
+        methodSignature: [makeHolder("Lib.Item")],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toMatchObject([{ members: { id: 7 } }]);
+      expect(result.genericTypeArguments).toHaveLength(1);
+      expect(result.genericTypeArguments![0]).toMatchObject({ members: { Data: "System.String" } });
+      expect(result.methodSignature).toHaveLength(1);
+      expect(result.methodSignature![0]).toMatchObject({ members: { Data: "Lib.Item" } });
+    });
+
     it("round-trips methodSignature without args (MethodSignatureInArray only)", () => {
       const sigEntry = { typeName: "System.UnitySerializationHolder", libraryName: "mscorlib", members: { Data: "System.String", UnityType: 9 } };
       const call: NrbfMethodCall = {
