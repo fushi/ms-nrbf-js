@@ -308,10 +308,7 @@ class Deserializer {
     const libraryName = this.libraries.get(libraryId);
     if (libraryName !== undefined) obj.libraryName = libraryName;
     this.objects.set(classInfo.objectId, obj);
-    const knownMeta = this.classesByName.get(`${classInfo.name}@${libraryId}`);
-    obj.members = knownMeta?.memberTypeInfo
-      ? this.readMembers(classInfo, knownMeta.memberTypeInfo)
-      : this.readMembersUntyped(classInfo);
+    obj.members = this.readMembersUntyped(classInfo);
     return obj;
   }
 
@@ -321,10 +318,7 @@ class Deserializer {
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
     this.objects.set(classInfo.objectId, obj);
-    const knownMeta = this.classesByName.get(classInfo.name);
-    obj.members = knownMeta?.memberTypeInfo
-      ? this.readMembers(classInfo, knownMeta.memberTypeInfo)
-      : this.readMembersUntyped(classInfo);
+    obj.members = this.readMembersUntyped(classInfo);
     return obj;
   }
 
@@ -721,10 +715,6 @@ class Deserializer {
     return [type === PrimitiveTypeEnumeration.Null ? null : this.r.readPrimitive(type), type];
   }
 
-  private readValueWithCode(): NrbfValue {
-    return this.readValueWithCodeAndType()[0];
-  }
-
   // §2.2.2.3 — INT32 count + count × ValueWithCode
   private readArrayOfValueWithCodeTyped(): [NrbfValue[], PrimitiveTypeEnumeration[]] {
     const count = this.r.readInt32();
@@ -736,10 +726,6 @@ class Deserializer {
       types.push(t);
     }
     return [values, types];
-  }
-
-  private readArrayOfValueWithCode(): NrbfValue[] {
-    return this.readArrayOfValueWithCodeTyped()[0];
   }
 }
 
