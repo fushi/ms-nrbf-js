@@ -152,10 +152,10 @@ class Serializer {
     return this.w.toBuffer();
   }
 
-  private writeHeader(rootId = -1): void {
+  private writeHeader(rootId = 0, headerId = -1): void {
     this.w.writeByte(RecordTypeEnumeration.SerializedStreamHeader);
     this.w.writeInt32(rootId);
-    this.w.writeInt32(-1); // headerId
+    this.w.writeInt32(headerId);
     this.w.writeInt32(1);  // majorVersion
     this.w.writeInt32(0);  // minorVersion
   }
@@ -196,7 +196,7 @@ class Serializer {
     }
 
     const callArrayId = needsCallArray ? this.nextId++ : undefined;
-    this.writeHeader(callArrayId ?? -1);
+    this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
 
     if (needsCallArray) {
       for (const [name, id] of this.libraryIds) {
@@ -273,7 +273,7 @@ class Serializer {
     flags |= ret.messageProperties !== undefined ? MessageFlags.PropertiesInArray : 0;
 
     const callArrayId = needsCallArray ? this.nextId++ : undefined;
-    this.writeHeader(callArrayId ?? -1);
+    this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
 
     if (needsCallArray) {
       for (const [name, id] of this.libraryIds) {
