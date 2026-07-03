@@ -1438,6 +1438,26 @@ describe("serialize", () => {
       expect(buf.readInt32LE(idx + 14)).toBe(3); // lengths[1] = 3
     });
 
+    it("round-trips a Rectangular NrbfArray with SystemClass element type", () => {
+      // Covers serialize.ts lines 614–616: SystemClass branch writes elementClassName LPS.
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [2, 1],
+        elementBinaryType: BinaryTypeEnumeration.SystemClass,
+        elementClassName: "System.Exception",
+        elements: [
+          { typeName: "System.Exception", members: { _message: "oops" } } as NrbfObject,
+          null,
+        ],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
+      expect(result.elementBinaryType).toBe(BinaryTypeEnumeration.SystemClass);
+      expect(result.elementClassName).toBe("System.Exception");
+      expect((result.elements[0] as NrbfObject).members["_message"]).toBe("oops");
+      expect(result.elements[1]).toBeNull();
+    });
+
     it("byte-exact round-trip of object_graph.nrbf (contains RectangularOffset matrix)", () => {
       const buf = readFileSync(join(fixturesDir, "object_graph.nrbf"));
       // The matrix member uses RectangularOffset — verify serialize produces identical bytes
