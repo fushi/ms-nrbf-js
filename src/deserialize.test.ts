@@ -558,6 +558,24 @@ describe("deserialize", () => {
       const result = deserialize(stream) as NrbfMethodCall;
       expect(result.args).toEqual(["late-arg"]);
     });
+
+    it("resolves a back-referenced arg (MemberReference to already-registered object)", () => {
+      // Covers readReferenceableValueWithType line 170: `return [existing, undefined]`.
+      // A BinaryObjectString is registered before the MethodCall, then referenced
+      // inside the call array — existing !== undefined so the early return fires.
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) = 0x14
+      const stream = buf(
+        header(1),
+        [0x06, ...i32(3), ...lps("pre-defined")],  // id=3 registered before method call
+        [0x15, ...i32(0x14), ...svwc("BackRef"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(3)],                          // arg[0]: MemberReference to id=3 (already registered)
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["pre-defined"]);
+      expect(result.argTypes).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------
