@@ -358,6 +358,30 @@ describe("deserialize", () => {
     });
   });
 
+  describe("readMembersUntyped — forward-ref fixup callback", () => {
+    it("resolves a forward-referenced member of a SystemClassWithMembers record", () => {
+      // SystemClassWithMembers (0x02): ClassInfo + member values with no type metadata.
+      // Member "forward" is a MemberReference to id=99, which is defined after the class.
+      // This triggers the fixup callback on line 239: (v) => { members[name] = v; }
+      const stream = buf(
+        header(1),
+        [
+          0x02,                                   // SystemClassWithMembers tag
+          ...i32(1), ...lps("MyClass"), ...i32(2),  // objectId=1, name, memberCount=2
+          ...lps("immediate"), ...lps("forward"),    // member names
+        ],
+        [0x06, ...i32(2), ...lps("val-a")],       // member "immediate": BinaryObjectString
+        [0x09, ...i32(99)],                        // member "forward": MemberReference to id=99 (not yet registered)
+        [0x06, ...i32(99), ...lps("val-b")],       // id=99 defined after the class
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject;
+      expect(result.typeName).toBe("MyClass");
+      expect(result.members["immediate"]).toBe("val-a");
+      expect(result.members["forward"]).toBe("val-b");
+    });
+  });
+
   describe("nested objects", () => {
     it("deserializes a class whose member is another class", () => {
       const stream = buf(
