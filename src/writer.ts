@@ -54,10 +54,6 @@ export class BinaryWriter {
     this.alloc(8).writeDoubleLE(n, 0);
   }
 
-  writeBytes(buf: Buffer): void {
-    this.chunks.push(buf);
-  }
-
   // §2.1.1.6 — variable-length length prefix (1–5 bytes), then UTF-8 string body
   writeLengthPrefixedString(s: string): void {
     const body = Buffer.from(s, "utf8");
