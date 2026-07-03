@@ -432,6 +432,264 @@ describe("deserialize", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // BinaryMethodCall — ArgsIsArray call-array path
+  // ---------------------------------------------------------------------------
+
+  describe("BinaryMethodCall — ArgsIsArray call-array path", () => {
+    // StringValueWithCode: PrimitiveTypeEnumeration.String (0x12) + LPS
+    function svwc(s: string): number[] { return [0x12, ...lps(s)]; }
+
+    it("deserializes mixed-type args and populates argTypes", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) = 0x14
+      // arg[0]: BinaryObjectString → type=undefined; arg[1]: MemberPrimitiveTyped Int32 → type=PTE.Int32
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x14), ...svwc("DoWork"), ...svwc("IWorker")],
+        [0x10, ...i32(2), ...i32(2)],            // ArraySingleObject id=2, length=2
+        [0x06, ...i32(3), ...lps("payload")],    // arg[0]: BinaryObjectString
+        [0x08, 0x08, ...i32(42)],                // arg[1]: MemberPrimitiveTyped Int32 42
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.kind).toBe("MethodCall");
+      expect(result.methodName).toBe("DoWork");
+      expect(result.typeName).toBe("IWorker");
+      expect(result.args).toEqual(["payload", 42]);
+      expect(result.argTypes).toEqual([undefined, PTE.Int32]);
+    });
+
+    it("handles ObjectNull arg — argTypes not set when no typed args present", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) = 0x14
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x14), ...svwc("NullArg"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x0a],                                  // arg[0]: ObjectNull
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([null]);
+      expect(result.argTypes).toBeUndefined();
+    });
+
+    it("handles ContextInArray flag — last array element becomes callContext", () => {
+      // messageEnum: ArgsIsArray (0x04) | ContextInArray (0x40) = 0x44
+      // argCount = length(2) - hasCtx(1) = 1
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x44), ...svwc("WithCtx"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x08, 0x08, ...i32(7)],                 // arg[0]: MemberPrimitiveTyped Int32 7
+        [0x06, ...i32(3), ...lps("my-context")], // ctx: BinaryObjectString
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([7]);
+      expect(result.argTypes).toEqual([PTE.Int32]);
+      expect(result.callContext).toBe("my-context");
+    });
+
+    it("handles GenericMethod flag — extra array element becomes genericTypeArguments", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) | GenericMethod (0x8000) = 0x8014
+      // argCount = length(2) - hasGeneric(1) = 1
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x8014), ...svwc("GenericCall"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x06, ...i32(3), ...lps("arg-val")],    // arg[0]: BinaryObjectString
+        // generic: ArraySingleString(id=4, length=1) with one type-name string
+        [0x11, ...i32(4), ...i32(1), 0x06, ...i32(5), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["arg-val"]);
+      expect(result.genericTypeArguments).toEqual(["System.Int32"]);
+    });
+
+    it("handles MethodSignatureInArray flag — extra element becomes methodSignature", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) | MethodSignatureInArray (0x80) = 0x94
+      // argCount = length(2) - hasSig(1) = 1
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x94), ...svwc("SigMethod"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x08, 0x08, ...i32(1)],                 // arg[0]: MemberPrimitiveTyped Int32 1
+        // sig: ArraySingleString(id=3, length=2)
+        [0x11, ...i32(3), ...i32(2),
+         0x06, ...i32(4), ...lps("System.Int32"),
+         0x06, ...i32(5), ...lps("System.String")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([1]);
+      expect(result.methodSignature).toEqual(["System.Int32", "System.String"]);
+    });
+
+    it("handles PropertiesInArray flag — extra element becomes messageProperties", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) | PropertiesInArray (0x100) = 0x114
+      // argCount = length(2) - hasProps(1) = 1
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x114), ...svwc("Props"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x08, 0x01, 0x01],                      // arg[0]: MemberPrimitiveTyped Boolean true
+        // props: ArraySingleObject(id=3, length=2)
+        [0x10, ...i32(3), ...i32(2),
+         0x06, ...i32(4), ...lps("k"),
+         0x06, ...i32(5), ...lps("v")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([true]);
+      expect(result.messageProperties).toEqual(["k", "v"]);
+    });
+
+    it("resolves a forward-referenced arg via fixup after stream end", () => {
+      // MemberReference in call array pointing to id=99 which is defined AFTER the call array.
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) = 0x14
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x14), ...svwc("FwdRef"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // arg[0]: MemberReference to id=99 (forward ref)
+        [0x06, ...i32(99), ...lps("late-arg")],  // id=99 defined after call array
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["late-arg"]);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // BinaryMethodCall — ArgsInArray call-array path
+  // ---------------------------------------------------------------------------
+
+  describe("BinaryMethodCall — ArgsInArray call-array path", () => {
+    function svwc(s: string): number[] { return [0x12, ...lps(s)]; }
+
+    it("deserializes args from a nested sub-array (element 0 of call array)", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) = 0x18
+      // Call array element 0 is itself an array containing the args.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x18), ...svwc("DoWork"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],            // outer call array: objectId=2, length=1
+        // element 0: args sub-array ArraySingleObject(id=3, length=2)
+        [0x10, ...i32(3), ...i32(2),
+         0x06, ...i32(4), ...lps("hello"),
+         0x06, ...i32(5), ...lps("world")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.kind).toBe("MethodCall");
+      expect(result.args).toEqual(["hello", "world"]);
+    });
+
+    it("handles GenericMethod flag after args sub-array", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) | GenericMethod (0x8000) = 0x8018
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x8018), ...svwc("Generic"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],            // call array length=2
+        // element 0: args sub-array with one int
+        [0x10, ...i32(3), ...i32(1), 0x08, 0x08, ...i32(99)],
+        // element 1: generic type args ArraySingleString(id=4, length=1)
+        [0x11, ...i32(4), ...i32(1), 0x06, ...i32(5), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([99]);
+      expect(result.genericTypeArguments).toEqual(["System.Int32"]);
+    });
+
+    it("handles MethodSignatureInArray flag after args sub-array", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) | MethodSignatureInArray (0x80) = 0x98
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x98), ...svwc("SigMethod"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array
+        [0x10, ...i32(3), ...i32(1), 0x06, ...i32(4), ...lps("arg")],
+        // element 1: signature ArraySingleString(id=5, length=2)
+        [0x11, ...i32(5), ...i32(2),
+         0x06, ...i32(6), ...lps("System.String"),
+         0x06, ...i32(7), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["arg"]);
+      expect(result.methodSignature).toEqual(["System.String", "System.Int32"]);
+    });
+
+    it("handles ContextInArray flag after args sub-array", () => {
+      // messageEnum: ArgsInArray (0x08) | ContextInArray (0x40) = 0x48
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x48), ...svwc("WithCtx"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array
+        [0x10, ...i32(3), ...i32(1), 0x08, 0x08, ...i32(7)],
+        // element 1: context string
+        [0x06, ...i32(4), ...lps("ctx-value")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([7]);
+      expect(result.callContext).toBe("ctx-value");
+    });
+
+    it("handles PropertiesInArray flag after args sub-array", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) | PropertiesInArray (0x100) = 0x118
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x118), ...svwc("Props"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array
+        [0x10, ...i32(3), ...i32(1), 0x08, 0x01, 0x01],  // MemberPrimitiveTyped Boolean true
+        // element 1: properties array
+        [0x10, ...i32(4), ...i32(1), 0x06, ...i32(5), ...lps("prop")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([true]);
+      expect(result.messageProperties).toEqual(["prop"]);
+    });
+
+    it("drains extra elements when call array length exceeds processed entries", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) = 0x18
+      // Call array length=2 but only 1 flag element — drain loop must consume element 1.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x18), ...svwc("Extra"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array
+        [0x10, ...i32(3), ...i32(1), 0x06, ...i32(4), ...lps("x")],
+        // element 1: extra (drained by while loop)
+        [0x0a],                                  // ObjectNull
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["x"]);
+    });
+
+    it("resolves a forward-referenced args sub-array via fixup", () => {
+      // Element 0 is a MemberReference to an array defined after the call array.
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) = 0x18
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x18), ...svwc("FwdRef"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // element 0: MemberReference to id=99 (forward ref)
+        // id=99 defined after call array
+        [0x10, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("late")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["late"]);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Real binary fixtures
   // ---------------------------------------------------------------------------
 
