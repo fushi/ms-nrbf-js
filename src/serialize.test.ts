@@ -44,6 +44,20 @@ describe("serialize", () => {
     expect(() => serialize(true)).toThrow(TypeError);
   });
 
+  it("inferValueWithCodeType throws when an arg is a plain object (line 76)", () => {
+    // A plain object without typeName+members passes isNrbfObject=false → hasComplexArgs=false
+    // → ArgsInline path → writeValueWithCode({}) → inferValueWithCodeType({}) throws.
+    // The "array" message branch is structurally unreachable: any real JS array sets
+    // hasComplexArgs=true before inferValueWithCodeType is ever called.
+    const call: NrbfMethodCall = {
+      kind: "MethodCall",
+      methodName: "M",
+      typeName: "T",
+      args: [{} as unknown as NrbfValue],
+    };
+    expect(() => serialize(call)).toThrow(/cannot encode object as ValueWithCode/);
+  });
+
   describe("string root", () => {
     it("round-trips a string", () => {
       expect(roundTrip("hello")).toBe("hello");
