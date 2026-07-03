@@ -44,6 +44,16 @@ describe("serialize", () => {
     expect(() => serialize(true)).toThrow(TypeError);
   });
 
+  it("writeValue throws for an unrecognised object type (line 358 else branch)", () => {
+    // A plain object that is not NrbfObject/NrbfArray/DateTime/array slips through
+    // writeAnyValue's typeof==="object" gate and hits writeValue's defensive else.
+    const root: NrbfObject = {
+      typeName: "T",
+      members: { x: {} as unknown as NrbfValue },
+    };
+    expect(() => serialize(root)).toThrow(TypeError);
+  });
+
   it("writeAnyValue throws when inferPrimitiveType returns undefined (line 427)", () => {
     // Symbol is not null, not string, not object, not bool/number/bigint/DateTime →
     // inferPrimitiveType returns undefined → throws at line 427.
@@ -1536,6 +1546,23 @@ describe("serialize", () => {
       const matrix = root.members["Matrix"] as NrbfArray;
       expect(matrix.arrayType).toBe(BinaryArrayTypeEnumeration.RectangularOffset);
       expect(matrix.elements).toEqual([11, 12, 13, 21, 22, 23]);
+    });
+  });
+
+  describe("DateTime in mixed JS array (ArraySingleObject path)", () => {
+    it("round-trips a DateTime element alongside a string in an ArraySingleObject", () => {
+      const dt: DateTime = { ticks: 637_000_000_000_000_000n, kind: 1 };
+      const result = roundTrip([dt, "hello"]) as NrbfValue[];
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(dt);
+      expect(result[1]).toBe("hello");
+    });
+
+    it("round-trips a DateTime element alongside null", () => {
+      const dt: DateTime = { ticks: 0n, kind: 0 };
+      const result = roundTrip([dt, null]) as NrbfValue[];
+      expect(result[0]).toEqual(dt);
+      expect(result[1]).toBeNull();
     });
   });
 

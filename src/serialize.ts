@@ -358,6 +358,8 @@ class Serializer {
     } else if (isNrbfObject(value)) {
       this.objectIds.set(value, objectId);
       this.writeNrbfObject(value, objectId);
+    } else {
+      throw new TypeError(`serialize: cannot write value of unexpected type: ${Object.prototype.toString.call(value)}`);
     }
   }
 
@@ -408,6 +410,12 @@ class Serializer {
       this.w.writeByte(RecordTypeEnumeration.BinaryObjectString);
       this.w.writeInt32(this.nextId++);
       this.w.writeLengthPrefixedString(value);
+      return;
+    }
+    if (isDateTime(value)) {
+      this.w.writeByte(RecordTypeEnumeration.MemberPrimitiveTyped);
+      this.w.writeByte(PrimitiveTypeEnumeration.DateTime);
+      this.w.writePrimitive(PrimitiveTypeEnumeration.DateTime, value);
       return;
     }
     if (typeof value === "object") {
