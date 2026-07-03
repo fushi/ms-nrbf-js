@@ -358,6 +358,40 @@ describe("deserialize", () => {
     });
   });
 
+  describe("BinaryArray(Single) with Primitive element type", () => {
+    // BinaryArray (tag 7) with arrayTypeEnum=Single(0) + typeEnum=Primitive(0) reads
+    // elements via readPrimitive loop (line 420), unlike ArraySinglePrimitive (tag 15).
+    it("deserializes a flat Int32 BinaryArray(Single) as NrbfValue[]", () => {
+      const stream = buf(
+        header(1),
+        [
+          0x07,          // BinaryArray tag
+          ...i32(1),     // objectId=1
+          0x00,          // arrayTypeEnum=Single
+          ...i32(1),     // rank=1
+          ...i32(3),     // lengths[0]=3
+          0x00,          // typeEnum=Primitive
+          0x08,          // primitiveType=Int32
+          ...i32(10), ...i32(20), ...i32(30),
+        ],
+        END,
+      );
+      expect(deserialize(stream)).toEqual([10, 20, 30]);
+    });
+
+    it("deserializes an empty BinaryArray(Single, Primitive) as an empty array", () => {
+      const stream = buf(
+        header(1),
+        [
+          0x07, ...i32(1), 0x00, ...i32(1), ...i32(0),  // Single, rank=1, length=0
+          0x00, 0x08,                                     // Primitive, Int32
+        ],
+        END,
+      );
+      expect(deserialize(stream)).toEqual([]);
+    });
+  });
+
   describe("readMembersUntyped — forward-ref fixup callback", () => {
     it("resolves a forward-referenced member of a SystemClassWithMembers record", () => {
       // SystemClassWithMembers (0x02): ClassInfo + member values with no type metadata.
