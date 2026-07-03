@@ -44,6 +44,23 @@ describe("serialize", () => {
     expect(() => serialize(true)).toThrow(TypeError);
   });
 
+  it("writeAnyValue throws when inferPrimitiveType returns undefined (line 427)", () => {
+    // Symbol is not null, not string, not object, not bool/number/bigint/DateTime →
+    // inferPrimitiveType returns undefined → throws at line 427.
+    // A sibling NrbfObject arg makes hasComplexArgs=true, routing all args through
+    // writeAnyValue (the call-array path) rather than writeValueWithCode (inline path).
+    const call: NrbfMethodCall = {
+      kind: "MethodCall",
+      methodName: "M",
+      typeName: "T",
+      args: [
+        { typeName: "X", members: {} } as NrbfObject,
+        Symbol("x") as unknown as NrbfValue,
+      ],
+    };
+    expect(() => serialize(call)).toThrow(/cannot infer primitive type/);
+  });
+
   it("inferValueWithCodeType throws when an arg is a plain object (line 76)", () => {
     // A plain object without typeName+members passes isNrbfObject=false → hasComplexArgs=false
     // → ArgsInline path → writeValueWithCode({}) → inferValueWithCodeType({}) throws.
