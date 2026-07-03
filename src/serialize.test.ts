@@ -1538,4 +1538,45 @@ describe("serialize", () => {
       expect(matrix.elements).toEqual([11, 12, 13, 21, 22, 23]);
     });
   });
+
+  describe("defensive ?? fallbacks", () => {
+    it("round-trips a class with no members (empty writeMemberTypeInfo — line 502 branch)", () => {
+      // writeMemberTypeInfo is called with an empty entries array; the for-loop bodies are never entered.
+      const obj: NrbfObject = { typeName: "Empty", members: {} };
+      const result = roundTrip(obj) as NrbfObject;
+      expect(result.typeName).toBe("Empty");
+      expect(result.members).toEqual({});
+    });
+
+    it("ClassWithId fills missing member with null (line 540 ?? null branch)", () => {
+      // obj2 shares a type key with obj1 but omits "label".
+      // The ClassWithId write loop hits obj2.members["label"] === undefined → ?? null → ObjectNull.
+      const obj1: NrbfObject = { typeName: "T", members: { x: 1, label: "hello" } };
+      const obj2: NrbfObject = { typeName: "T", members: { x: 2 } };
+      const root: NrbfObject = { typeName: "Root", members: { a: obj1, b: obj2 } };
+      const result = deserialize(serialize(root)) as NrbfObject;
+      const b = result.members["b"] as NrbfObject;
+      expect(b.members["x"]).toBe(2);
+      expect(b.members["label"]).toBeNull();
+    });
+
+    it("NrbfArray with Class element type and no elementLibraryName uses library ID 0 (line 619 ?? 0 branch)", () => {
+      // collectLibraries sees elementLibraryName=undefined → nothing registered.
+      // writeNrbfArray hits libraryIds.get(undefined) ?? 0 → writes libraryId 0.
+      // readBinaryArray: libraries.get(0) = undefined → elementLibraryName stays unset.
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        elementBinaryType: BinaryTypeEnumeration.Class,
+        elementClassName: "SomeType",
+        lengths: [0, 0],
+        elements: [],
+      };
+      const result = deserialize(serialize(arr)) as NrbfArray;
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
+      expect(result.elementBinaryType).toBe(BinaryTypeEnumeration.Class);
+      expect(result.elementClassName).toBe("SomeType");
+      expect(result.elementLibraryName).toBeUndefined();
+      expect(result.elements).toEqual([]);
+    });
+  });
 });
