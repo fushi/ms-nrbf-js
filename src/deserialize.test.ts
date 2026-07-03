@@ -690,6 +690,104 @@ describe("deserialize", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // BinaryMethodReturn — call-array forward-ref fixup callbacks
+  // Each test places a MemberReference in the call array pointing to an object
+  // defined AFTER the array, so the fixup callback (not the immediate path) runs.
+  // ---------------------------------------------------------------------------
+
+  describe("BinaryMethodReturn — call-array forward-ref fixup callbacks", () => {
+    it("ReturnValueInArray forward-ref (line 667 callback)", () => {
+      // messageEnum: ReturnValueInArray (0x1000) | NoContext (0x10) = 0x1010
+      const stream = buf(
+        header(1),
+        [0x16, ...i32(0x1010)],                  // BinaryMethodReturn
+        [0x10, ...i32(2), ...i32(1)],            // call array: objectId=2, length=1
+        [0x09, ...i32(99)],                      // element 0: MemberReference to id=99
+        [0x06, ...i32(99), ...lps("late-ret")],  // id=99 defined after call array
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodReturn;
+      expect(result.kind).toBe("MethodReturn");
+      expect(result.returnValue).toBe("late-ret");
+    });
+
+    it("ArgsInArray forward-ref (lines 674–675 callback)", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) = 0x18
+      // Element 0 is a MemberReference to an array defined after the call array.
+      const stream = buf(
+        header(1),
+        [0x16, ...i32(0x18)],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to args sub-array
+        // id=99: ArraySingleObject with one element
+        [0x10, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("out-arg")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodReturn;
+      expect(result.args).toEqual(["out-arg"]);
+    });
+
+    it("ExceptionInArray forward-ref (line 682 callback)", () => {
+      // messageEnum: ExceptionInArray (0x2000) | NoContext (0x10) = 0x2010
+      const stream = buf(
+        header(1),
+        [0x16, ...i32(0x2010)],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to exception object
+        [0x06, ...i32(99), ...lps("err-msg")],   // id=99 defined after
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodReturn;
+      expect(result.exception).toBe("err-msg" as unknown as NrbfObject);
+    });
+
+    it("ContextInArray forward-ref (line 688 callback)", () => {
+      // messageEnum: ContextInArray (0x40) | NoReturnValue (0x200) = 0x240
+      const stream = buf(
+        header(1),
+        [0x16, ...i32(0x240)],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to context
+        [0x06, ...i32(99), ...lps("late-ctx")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodReturn;
+      expect(result.callContext).toBe("late-ctx");
+    });
+
+    it("PropertiesInArray forward-ref (line 694 callback)", () => {
+      // messageEnum: PropertiesInArray (0x100) | NoContext (0x10) | NoReturnValue (0x200) = 0x310
+      const stream = buf(
+        header(1),
+        [0x16, ...i32(0x310)],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to properties array
+        [0x10, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("prop")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodReturn;
+      expect(result.messageProperties).toEqual(["prop"]);
+    });
+
+    it("drain-loop forward-ref (lines 700–701 callback)", () => {
+      // Call array length=2 but only ReturnValueInArray accounts for 1 element;
+      // the second element hits the drain loop as a forward ref.
+      // messageEnum: ReturnValueInArray (0x1000) | NoContext (0x10) = 0x1010
+      const stream = buf(
+        header(1),
+        [0x16, ...i32(0x1010)],
+        [0x10, ...i32(2), ...i32(2)],            // length=2
+        [0x06, ...i32(3), ...lps("ret")],        // element 0: return value (immediate)
+        [0x09, ...i32(99)],                      // element 1: drain, forward ref
+        [0x06, ...i32(99), ...lps("extra")],     // id=99 defined after
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodReturn;
+      expect(result.returnValue).toBe("ret");    // drain element is consumed but not exposed
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Real binary fixtures
   // ---------------------------------------------------------------------------
 
