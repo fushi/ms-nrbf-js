@@ -503,6 +503,12 @@ describe("deserialize", () => {
       expect(result.callContext).toBe("ctx-val");
     });
 
+    it("readClassWithId throws when metadataId has no registered class metadata", () => {
+      // ClassWithId (0x01): objectId + metadataId. metadataId=99 is never registered → throws.
+      const stream = buf(header(1), [0x01, ...i32(1), ...i32(99)], END);
+      expect(() => deserialize(stream)).toThrow(/ClassWithId.*metadataId=99/);
+    });
+
     it("readCallArray throws when the tag after skipping BinaryLibraries is not ArraySingleObject", () => {
       // After any leading BinaryLibrary records, the next record must be ArraySingleObject.
       // messageEnum: ContextInArray (0x40).
