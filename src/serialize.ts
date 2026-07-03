@@ -74,7 +74,7 @@ function inferValueWithCodeType(v: NrbfValue): PrimitiveTypeEnumeration {
   const pt = inferPrimitiveType(v);
   if (pt !== undefined) return pt;
   throw new TypeError(
-    `serialize: cannot encode ${Array.isArray(v) ? "array" : "object"} as ValueWithCode — only primitives and strings are supported`,
+    `serialize: cannot encode object as ValueWithCode — only primitives and strings are supported`,
   );
 }
 
@@ -489,8 +489,7 @@ class Serializer {
 
     if (isNrbfObject(value)) {
       if (value.libraryName) {
-        const libraryId = this.libraryIds.get(value.libraryName) ?? 0;
-        return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName: value.typeName, libraryId } };
+        return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName: value.typeName, libraryId: this.libraryIds.get(value.libraryName)! } };
       }
       return { binaryType: BinaryTypeEnumeration.SystemClass, className: value.typeName };
     }
@@ -550,7 +549,7 @@ class Serializer {
     this.classMeta.set(key, { firstObjectId: objectId, memberNames, memberTypeEntries });
 
     if (obj.libraryName) {
-      const libraryId = this.libraryIds.get(obj.libraryName) ?? 0;
+      const libraryId = this.libraryIds.get(obj.libraryName)!;
       this.w.writeByte(RecordTypeEnumeration.ClassWithMembersAndTypes);
       this.writeClassInfo(objectId, obj.typeName, memberNames);
       this.writeMemberTypeInfo(memberTypeEntries);
@@ -586,7 +585,7 @@ class Serializer {
       return undefined;
     }
     if (libraryName) {
-      return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName, libraryId: this.libraryIds.get(libraryName) ?? 0 } };
+      return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName, libraryId: this.libraryIds.get(libraryName)! } };
     }
     return { binaryType: BinaryTypeEnumeration.SystemClass, className: typeName };
   }
