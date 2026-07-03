@@ -487,6 +487,33 @@ describe("deserialize", () => {
       );
       expect(() => deserialize(stream)).toThrow(/objectId=99/);
     });
+
+    it("readCallArray skips a leading BinaryLibrary record before ArraySingleObject", () => {
+      // Grammar allows 0 or 1 BinaryLibrary before the ArraySingleObject in a callArray.
+      // messageEnum: ContextInArray (0x40) — triggers readCallArray with no arg flags.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x40), 0x12, ...lps("M"), 0x12, ...lps("T")],  // BinaryMethodCall
+        [0x0c, ...i32(10), ...lps("MyLib")],     // BinaryLibrary — must be skipped (lines 533–535)
+        [0x10, ...i32(2), ...i32(1)],             // ArraySingleObject: objectId=2, length=1
+        [0x06, ...i32(3), ...lps("ctx-val")],     // context element
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.callContext).toBe("ctx-val");
+    });
+
+    it("readCallArray throws when the tag after skipping BinaryLibraries is not ArraySingleObject", () => {
+      // After any leading BinaryLibrary records, the next record must be ArraySingleObject.
+      // messageEnum: ContextInArray (0x40).
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x40), 0x12, ...lps("M"), 0x12, ...lps("T")],  // BinaryMethodCall
+        [0x06, ...i32(1), ...lps("wrong")],       // BinaryObjectString (0x06) — not ArraySingleObject
+        END,
+      );
+      expect(() => deserialize(stream)).toThrow(/Expected ArraySingleObject/);
+    });
   });
 
   // ---------------------------------------------------------------------------
