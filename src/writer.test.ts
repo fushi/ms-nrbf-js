@@ -155,4 +155,41 @@ describe("BinaryWriter", () => {
       expect(() => writePrimitive(99 as PrimitiveTypeEnumeration, null)).toThrow(RangeError);
     });
   });
+
+  describe("writeLengthPrefixedString", () => {
+    function writeLPS(s: string): Buffer {
+      const w = new BinaryWriter();
+      w.writeLengthPrefixedString(s);
+      return w.toBuffer();
+    }
+
+    it("2-byte length prefix for 128-byte string", () => {
+      // 128 = 0b10000000 → LEB128: [0x80, 0x01]
+      const s = "a".repeat(128);
+      const buf = writeLPS(s);
+      expect(buf[0]).toBe(0x80);
+      expect(buf[1]).toBe(0x01);
+      expect(buf.length).toBe(130);
+      expect(buf.subarray(2).toString("utf8")).toBe(s);
+    });
+
+    it("2-byte length prefix for 16383-byte string (upper boundary)", () => {
+      // 16383 = 0b11111111111111 → LEB128: [0xff, 0x7f]
+      const s = "b".repeat(16383);
+      const buf = writeLPS(s);
+      expect(buf[0]).toBe(0xff);
+      expect(buf[1]).toBe(0x7f);
+      expect(buf.length).toBe(16385);
+    });
+
+    it("3-byte length prefix for 16384-byte string", () => {
+      // 16384 = 0b100000000000000 → LEB128: [0x80, 0x80, 0x01]
+      const s = "c".repeat(16384);
+      const buf = writeLPS(s);
+      expect(buf[0]).toBe(0x80);
+      expect(buf[1]).toBe(0x80);
+      expect(buf[2]).toBe(0x01);
+      expect(buf.length).toBe(16387);
+    });
+  });
 });
