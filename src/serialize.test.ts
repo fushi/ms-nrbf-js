@@ -925,6 +925,19 @@ describe("serialize", () => {
       expect(result.callContext).toMatchObject({ members: { traceId: "abc" } });
       expect(result.messageProperties).toMatchObject([{ members: { key: "val" } }]);
     });
+
+    it("round-trips inline null arg (inferValueWithCodeType null branch, line 72)", () => {
+      // null is a valid inline arg — inferValueWithCodeType(null) returns PrimitiveTypeEnumeration.Null.
+      // hasComplexArgs=false for [null], so ArgsInline path is taken.
+      const call: NrbfMethodCall = {
+        kind: "MethodCall",
+        methodName: "M",
+        typeName: "T",
+        args: [null],
+      };
+      const result = roundTripCall(call);
+      expect(result.args).toEqual([null]);
+    });
   });
 
   describe("NrbfMethodReturn", () => {
