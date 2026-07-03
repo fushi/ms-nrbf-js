@@ -1458,6 +1458,30 @@ describe("serialize", () => {
       expect(result.elements[1]).toBeNull();
     });
 
+    it("round-trips a Rectangular NrbfArray with Class element type", () => {
+      // Covers serialize.ts lines 617–620: Class branch writes elementClassName LPS + libraryId INT32.
+      // Also exercises collectLibraries line 335: elementLibraryName registration.
+      const lib = "MyAssembly, Version=1.0.0.0";
+      const arr: NrbfArray = {
+        arrayType: BinaryArrayTypeEnumeration.Rectangular,
+        lengths: [2, 1],
+        elementBinaryType: BinaryTypeEnumeration.Class,
+        elementClassName: "MyNamespace.MyClass",
+        elementLibraryName: lib,
+        elements: [
+          { typeName: "MyNamespace.MyClass", libraryName: lib, members: { value: 1 } } as NrbfObject,
+          null,
+        ],
+      };
+      const result = roundTripArr(arr);
+      expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
+      expect(result.elementBinaryType).toBe(BinaryTypeEnumeration.Class);
+      expect(result.elementClassName).toBe("MyNamespace.MyClass");
+      expect(result.elementLibraryName).toBe(lib);
+      expect((result.elements[0] as NrbfObject).members["value"]).toBe(1);
+      expect(result.elements[1]).toBeNull();
+    });
+
     it("byte-exact round-trip of object_graph.nrbf (contains RectangularOffset matrix)", () => {
       const buf = readFileSync(join(fixturesDir, "object_graph.nrbf"));
       // The matrix member uses RectangularOffset — verify serialize produces identical bytes
