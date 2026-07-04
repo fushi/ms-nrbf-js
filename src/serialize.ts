@@ -140,11 +140,7 @@ class Serializer {
     this.w.writeInt32(0);  // minorVersion
 
     // Write all BinaryLibrary records upfront
-    for (const [name, id] of this.libraryIds) {
-      this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
-      this.w.writeInt32(id);
-      this.w.writeLengthPrefixedString(name);
-    }
+    this.writeBinaryLibraries();
 
     this.writeValue(value, rootId);
 
@@ -158,6 +154,14 @@ class Serializer {
     this.w.writeInt32(headerId);
     this.w.writeInt32(1);  // majorVersion
     this.w.writeInt32(0);  // minorVersion
+  }
+
+  private writeBinaryLibraries(): void {
+    for (const [name, id] of this.libraryIds) {
+      this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
+      this.w.writeInt32(id);
+      this.w.writeLengthPrefixedString(name);
+    }
   }
 
   private runMethodCall(call: NrbfMethodCall): Buffer {
@@ -199,11 +203,7 @@ class Serializer {
     this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
 
     if (needsCallArray) {
-      for (const [name, id] of this.libraryIds) {
-        this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
-        this.w.writeInt32(id);
-        this.w.writeLengthPrefixedString(name);
-      }
+      this.writeBinaryLibraries();
     }
 
     this.w.writeByte(RecordTypeEnumeration.MethodCall);
@@ -276,11 +276,7 @@ class Serializer {
     this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
 
     if (needsCallArray) {
-      for (const [name, id] of this.libraryIds) {
-        this.w.writeByte(RecordTypeEnumeration.BinaryLibrary);
-        this.w.writeInt32(id);
-        this.w.writeLengthPrefixedString(name);
-      }
+      this.writeBinaryLibraries();
     }
 
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
