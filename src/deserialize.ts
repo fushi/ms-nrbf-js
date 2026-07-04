@@ -569,50 +569,15 @@ class Deserializer {
         }
         result.args = argSlice;
         if (hasArgType) result.argTypes = argTypeSlice;
-        if (hasGeneric) {
-          const genIdx = arr.length;
-          const gen = this.readReferenceableValue((v) => {
-            arr[genIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
-            result.genericTypeArguments = v;
-          });
-          arr.push(gen);
-          if (Array.isArray(gen)) result.genericTypeArguments = gen;
-        }
-        if (hasSig) {
-          const sigIdx = arr.length;
-          const sig = this.readReferenceableValue((v) => {
-            arr[sigIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
-            result.methodSignature = v;
-          });
-          arr.push(sig);
-          if (Array.isArray(sig)) result.methodSignature = sig;
-        }
-        if (hasCtx) {
-          const ctxIdx = arr.length;
-          const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
-          arr.push(ctx);
-          result.callContext = ctx as string | NrbfObject;
-        }
-        if (hasProps) {
-          const propsIdx = arr.length;
-          const val = this.readReferenceableValue((v) => {
-            arr[propsIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
-            result.messageProperties = v;
-          });
-          arr.push(val);
-          if (Array.isArray(val)) result.messageProperties = val;
-        }
-      } else if (messageEnum & MessageFlags.ArgsInArray) {
-        // Element 0 is the nested args sub-array. Order per §2.2.3.2:
-        // ArgsInArray, GenericMethod, MethodSignature, CallContext, MessageProperties.
-        {
-          const idx = 0;
+        this.readOptionalGenericTypeArgs(messageEnum, arr, result);
+        this.readOptionalMethodSignature(messageEnum, arr, result);
+        this.readOptionalCallContext(messageEnum, arr, result);
+        this.readOptionalMessageProperties(messageEnum, arr, result);
+      } else {
+        // ArgsInArray: element 0 is the nested args sub-array. Otherwise: no arg flags set.
+        // Order per §2.2.3.2: ArgsInArray, GenericMethod, MethodSignature, CallContext, MessageProperties.
+        if (messageEnum & MessageFlags.ArgsInArray) {
+          const idx = arr.length;
           const val = this.readReferenceableValue((v) => {
             arr[idx] = v;
             /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
@@ -622,90 +587,10 @@ class Deserializer {
           arr.push(val);
           if (Array.isArray(val)) result.args = val;
         }
-        if (messageEnum & MessageFlags.GenericMethod) {
-          const genIdx = arr.length;
-          const gen = this.readReferenceableValue((v) => {
-            arr[genIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
-            result.genericTypeArguments = v;
-          });
-          arr.push(gen);
-          if (Array.isArray(gen)) result.genericTypeArguments = gen;
-        }
-        if (messageEnum & MessageFlags.MethodSignatureInArray) {
-          const sigIdx = arr.length;
-          const sig = this.readReferenceableValue((v) => {
-            arr[sigIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
-            result.methodSignature = v;
-          });
-          arr.push(sig);
-          if (Array.isArray(sig)) result.methodSignature = sig;
-        }
-        if (messageEnum & MessageFlags.ContextInArray) {
-          const ctxIdx = arr.length;
-          const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
-          arr.push(ctx);
-          result.callContext = ctx as string | NrbfObject;
-        }
-        if (messageEnum & MessageFlags.PropertiesInArray) {
-          const propsIdx = arr.length;
-          const val = this.readReferenceableValue((v) => {
-            arr[propsIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
-            result.messageProperties = v;
-          });
-          arr.push(val);
-          if (Array.isArray(val)) result.messageProperties = val;
-        }
-        while (arr.length < length) {
-          const idx = arr.length;
-          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
-        }
-      } else {
-        // GenericMethod and/or MethodSignatureInArray and/or ContextInArray and/or PropertiesInArray with no arg flags.
-        if (messageEnum & MessageFlags.GenericMethod) {
-          const genIdx = arr.length;
-          const gen = this.readReferenceableValue((v) => {
-            arr[genIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
-            result.genericTypeArguments = v;
-          });
-          arr.push(gen);
-          if (Array.isArray(gen)) result.genericTypeArguments = gen;
-        }
-        if (messageEnum & MessageFlags.MethodSignatureInArray) {
-          const sigIdx = arr.length;
-          const sig = this.readReferenceableValue((v) => {
-            arr[sigIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
-            result.methodSignature = v;
-          });
-          arr.push(sig);
-          if (Array.isArray(sig)) result.methodSignature = sig;
-        }
-        if (messageEnum & MessageFlags.ContextInArray) {
-          const ctxIdx = arr.length;
-          const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
-          arr.push(ctx);
-          result.callContext = ctx as string | NrbfObject;
-        }
-        if (messageEnum & MessageFlags.PropertiesInArray) {
-          const propsIdx = arr.length;
-          const val = this.readReferenceableValue((v) => {
-            arr[propsIdx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
-            result.messageProperties = v;
-          });
-          arr.push(val);
-          if (Array.isArray(val)) result.messageProperties = val;
-        }
+        this.readOptionalGenericTypeArgs(messageEnum, arr, result);
+        this.readOptionalMethodSignature(messageEnum, arr, result);
+        this.readOptionalCallContext(messageEnum, arr, result);
+        this.readOptionalMessageProperties(messageEnum, arr, result);
         while (arr.length < length) {
           const idx = arr.length;
           arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
@@ -736,29 +621,61 @@ class Deserializer {
         arr.push(val);
         result.exception = val as NrbfObject;
       }
-      if (messageEnum & MessageFlags.ContextInArray) {
-        const ctxIdx = arr.length;
-        const ctx = this.readReferenceableValue((v) => { arr[ctxIdx] = v; result.callContext = v as string | NrbfObject; });
-        arr.push(ctx);
-        result.callContext = ctx as string | NrbfObject;
-      }
-      if (messageEnum & MessageFlags.PropertiesInArray) {
-        const propsIdx = arr.length;
-        const val = this.readReferenceableValue((v) => {
-          arr[propsIdx] = v;
-          /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-          if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
-          result.messageProperties = v;
-        });
-        arr.push(val);
-        if (Array.isArray(val)) result.messageProperties = val;
-      }
+      this.readOptionalCallContext(messageEnum, arr, result);
+      this.readOptionalMessageProperties(messageEnum, arr, result);
       // Drain any remaining elements.
       while (arr.length < length) {
         const idx = arr.length;
         arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
       }
     }
+  }
+
+  private readOptionalGenericTypeArgs(messageEnum: number, arr: NrbfValue[], result: NrbfMethodCall): void {
+    if (!(messageEnum & MessageFlags.GenericMethod)) return;
+    const idx = arr.length;
+    const val = this.readReferenceableValue((v) => {
+      arr[idx] = v;
+      /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+      if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
+      result.genericTypeArguments = v;
+    });
+    arr.push(val);
+    if (Array.isArray(val)) result.genericTypeArguments = val;
+  }
+
+  private readOptionalMethodSignature(messageEnum: number, arr: NrbfValue[], result: NrbfMethodCall): void {
+    if (!(messageEnum & MessageFlags.MethodSignatureInArray)) return;
+    const idx = arr.length;
+    const val = this.readReferenceableValue((v) => {
+      arr[idx] = v;
+      /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+      if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
+      result.methodSignature = v;
+    });
+    arr.push(val);
+    if (Array.isArray(val)) result.methodSignature = val;
+  }
+
+  private readOptionalCallContext(messageEnum: number, arr: NrbfValue[], result: NrbfMethodCall | NrbfMethodReturn): void {
+    if (!(messageEnum & MessageFlags.ContextInArray)) return;
+    const idx = arr.length;
+    const ctx = this.readReferenceableValue((v) => { arr[idx] = v; result.callContext = v as string | NrbfObject; });
+    arr.push(ctx);
+    result.callContext = ctx as string | NrbfObject;
+  }
+
+  private readOptionalMessageProperties(messageEnum: number, arr: NrbfValue[], result: NrbfMethodCall | NrbfMethodReturn): void {
+    if (!(messageEnum & MessageFlags.PropertiesInArray)) return;
+    const idx = arr.length;
+    const val = this.readReferenceableValue((v) => {
+      arr[idx] = v;
+      /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+      if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
+      result.messageProperties = v;
+    });
+    arr.push(val);
+    if (Array.isArray(val)) result.messageProperties = val;
   }
 
   // §2.2.2.2 — PrimitiveTypeEnum(18) + LengthPrefixedString
