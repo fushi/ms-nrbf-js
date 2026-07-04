@@ -266,6 +266,13 @@ class Deserializer {
     this.classesByName.set(nameKey, meta);
   }
 
+  private resolveLibraryName(libraryId: number): string {
+    const name = this.libraries.get(libraryId);
+    /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
+    if (name === undefined) throw new Error(`Unknown libraryId=${libraryId}`);
+    return name;
+  }
+
   // -------------------------------------------------------------------------
   // Class records
   // -------------------------------------------------------------------------
@@ -277,10 +284,7 @@ class Deserializer {
     this.storeClassMeta({ classInfo, memberTypeInfo, libraryId }, `${classInfo.name}@${libraryId}`);
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    const libraryName = this.libraries.get(libraryId);
-    /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
-    if (libraryName === undefined) throw new Error(`Unknown libraryId=${libraryId}`);
-    obj.libraryName = libraryName;
+    obj.libraryName = this.resolveLibraryName(libraryId);
     const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
     if (memberTypes !== undefined) obj.memberTypes = memberTypes;
     this.objects.set(classInfo.objectId, obj);
@@ -307,10 +311,7 @@ class Deserializer {
     this.storeClassMeta({ classInfo, libraryId }, `${classInfo.name}@${libraryId}`);
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    const libraryName = this.libraries.get(libraryId);
-    /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
-    if (libraryName === undefined) throw new Error(`Unknown libraryId=${libraryId}`);
-    obj.libraryName = libraryName;
+    obj.libraryName = this.resolveLibraryName(libraryId);
     this.objects.set(classInfo.objectId, obj);
     obj.members = this.readMembersUntyped(classInfo);
     return obj;
@@ -334,10 +335,7 @@ class Deserializer {
 
     const obj: NrbfObject = { typeName: meta.classInfo.name, members: {} };
     if (meta.libraryId !== undefined) {
-      const libraryName = this.libraries.get(meta.libraryId);
-      /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
-      if (libraryName === undefined) throw new Error(`Unknown libraryId=${meta.libraryId}`);
-      obj.libraryName = libraryName;
+      obj.libraryName = this.resolveLibraryName(meta.libraryId);
     }
     if (meta.memberTypeInfo) {
       const memberTypes = this.extractMemberTypes(meta.classInfo, meta.memberTypeInfo);
