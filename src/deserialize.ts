@@ -278,7 +278,9 @@ class Deserializer {
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
     const libraryName = this.libraries.get(libraryId);
-    if (libraryName !== undefined) obj.libraryName = libraryName;
+    /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
+    if (libraryName === undefined) throw new Error(`Unknown libraryId=${libraryId}`);
+    obj.libraryName = libraryName;
     const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
     if (memberTypes !== undefined) obj.memberTypes = memberTypes;
     this.objects.set(classInfo.objectId, obj);
@@ -306,7 +308,9 @@ class Deserializer {
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
     const libraryName = this.libraries.get(libraryId);
-    if (libraryName !== undefined) obj.libraryName = libraryName;
+    /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
+    if (libraryName === undefined) throw new Error(`Unknown libraryId=${libraryId}`);
+    obj.libraryName = libraryName;
     this.objects.set(classInfo.objectId, obj);
     obj.members = this.readMembersUntyped(classInfo);
     return obj;
@@ -331,7 +335,9 @@ class Deserializer {
     const obj: NrbfObject = { typeName: meta.classInfo.name, members: {} };
     if (meta.libraryId !== undefined) {
       const libraryName = this.libraries.get(meta.libraryId);
-      if (libraryName !== undefined) obj.libraryName = libraryName;
+      /* v8 ignore next -- BinaryLibrary must precede any class that references its id; missing means a malformed stream */
+      if (libraryName === undefined) throw new Error(`Unknown libraryId=${meta.libraryId}`);
+      obj.libraryName = libraryName;
     }
     if (meta.memberTypeInfo) {
       const memberTypes = this.extractMemberTypes(meta.classInfo, meta.memberTypeInfo);
@@ -567,13 +573,23 @@ class Deserializer {
         if (hasArgType) result.argTypes = argTypeSlice;
         if (hasGeneric) {
           const genIdx = arr.length;
-          const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
+          const gen = this.readReferenceableValue((v) => {
+            arr[genIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
+            result.genericTypeArguments = v;
+          });
           arr.push(gen);
           if (Array.isArray(gen)) result.genericTypeArguments = gen;
         }
         if (hasSig) {
           const sigIdx = arr.length;
-          const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
+          const sig = this.readReferenceableValue((v) => {
+            arr[sigIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
+            result.methodSignature = v;
+          });
           arr.push(sig);
           if (Array.isArray(sig)) result.methodSignature = sig;
         }
@@ -585,7 +601,12 @@ class Deserializer {
         }
         if (hasProps) {
           const propsIdx = arr.length;
-          const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+          const val = this.readReferenceableValue((v) => {
+            arr[propsIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
+            result.messageProperties = v;
+          });
           arr.push(val);
           if (Array.isArray(val)) result.messageProperties = val;
         }
@@ -596,20 +617,32 @@ class Deserializer {
           const idx = 0;
           const val = this.readReferenceableValue((v) => {
             arr[idx] = v;
-            if (Array.isArray(v)) result.args = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at args, got ${typeof v}`);
+            result.args = v;
           });
           arr.push(val);
           if (Array.isArray(val)) result.args = val;
         }
         if (messageEnum & MessageFlags.GenericMethod) {
           const genIdx = arr.length;
-          const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
+          const gen = this.readReferenceableValue((v) => {
+            arr[genIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
+            result.genericTypeArguments = v;
+          });
           arr.push(gen);
           if (Array.isArray(gen)) result.genericTypeArguments = gen;
         }
         if (messageEnum & MessageFlags.MethodSignatureInArray) {
           const sigIdx = arr.length;
-          const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
+          const sig = this.readReferenceableValue((v) => {
+            arr[sigIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
+            result.methodSignature = v;
+          });
           arr.push(sig);
           if (Array.isArray(sig)) result.methodSignature = sig;
         }
@@ -621,7 +654,12 @@ class Deserializer {
         }
         if (messageEnum & MessageFlags.PropertiesInArray) {
           const propsIdx = arr.length;
-          const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+          const val = this.readReferenceableValue((v) => {
+            arr[propsIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
+            result.messageProperties = v;
+          });
           arr.push(val);
           if (Array.isArray(val)) result.messageProperties = val;
         }
@@ -633,13 +671,23 @@ class Deserializer {
         // GenericMethod and/or MethodSignatureInArray and/or ContextInArray and/or PropertiesInArray with no arg flags.
         if (messageEnum & MessageFlags.GenericMethod) {
           const genIdx = arr.length;
-          const gen = this.readReferenceableValue((v) => { arr[genIdx] = v; if (Array.isArray(v)) result.genericTypeArguments = v; });
+          const gen = this.readReferenceableValue((v) => {
+            arr[genIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at genericTypeArguments, got ${typeof v}`);
+            result.genericTypeArguments = v;
+          });
           arr.push(gen);
           if (Array.isArray(gen)) result.genericTypeArguments = gen;
         }
         if (messageEnum & MessageFlags.MethodSignatureInArray) {
           const sigIdx = arr.length;
-          const sig = this.readReferenceableValue((v) => { arr[sigIdx] = v; if (Array.isArray(v)) result.methodSignature = v; });
+          const sig = this.readReferenceableValue((v) => {
+            arr[sigIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at methodSignature, got ${typeof v}`);
+            result.methodSignature = v;
+          });
           arr.push(sig);
           if (Array.isArray(sig)) result.methodSignature = sig;
         }
@@ -651,7 +699,12 @@ class Deserializer {
         }
         if (messageEnum & MessageFlags.PropertiesInArray) {
           const propsIdx = arr.length;
-          const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+          const val = this.readReferenceableValue((v) => {
+            arr[propsIdx] = v;
+            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+            if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
+            result.messageProperties = v;
+          });
           arr.push(val);
           if (Array.isArray(val)) result.messageProperties = val;
         }
@@ -672,7 +725,9 @@ class Deserializer {
         const idx = arr.length;
         const val = this.readReferenceableValue((v) => {
           arr[idx] = v;
-          if (Array.isArray(v)) result.args = v;
+          /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+          if (!Array.isArray(v)) throw new Error(`Expected array at args, got ${typeof v}`);
+          result.args = v;
         });
         arr.push(val);
         if (Array.isArray(val)) result.args = val;
@@ -691,7 +746,12 @@ class Deserializer {
       }
       if (messageEnum & MessageFlags.PropertiesInArray) {
         const propsIdx = arr.length;
-        const val = this.readReferenceableValue((v) => { arr[propsIdx] = v; if (Array.isArray(v)) result.messageProperties = v; });
+        const val = this.readReferenceableValue((v) => {
+          arr[propsIdx] = v;
+          /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+          if (!Array.isArray(v)) throw new Error(`Expected array at messageProperties, got ${typeof v}`);
+          result.messageProperties = v;
+        });
         arr.push(val);
         if (Array.isArray(val)) result.messageProperties = val;
       }
