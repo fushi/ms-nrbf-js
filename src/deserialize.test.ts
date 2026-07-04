@@ -667,6 +667,76 @@ describe("deserialize", () => {
       expect(result.args).toEqual(["pre-defined"]);
       expect(result.argTypes).toBeUndefined();
     });
+
+    it("resolves a forward-referenced GenericMethod array via fixup (line 570 callback)", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) | GenericMethod (0x8000) = 0x8014
+      // argCount = length(2) - hasGeneric(1) = 1; generic element is a forward MemberReference.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x8014), ...svwc("Gen"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x06, ...i32(3), ...lps("arg-val")],    // arg[0]: inline
+        [0x09, ...i32(99)],                      // generic element: MemberReference to id=99 (forward ref)
+        [0x11, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["arg-val"]);
+      expect(result.genericTypeArguments).toEqual(["System.Int32"]);
+    });
+
+    it("resolves a forward-referenced MethodSignature array via fixup (line 576 callback)", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) | MethodSignatureInArray (0x80) = 0x94
+      // argCount = length(2) - hasSig(1) = 1; signature element is a forward MemberReference.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x94), ...svwc("Sig"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x08, 0x08, ...i32(1)],                 // arg[0]: inline Int32
+        [0x09, ...i32(99)],                      // signature element: MemberReference to id=99 (forward ref)
+        [0x11, ...i32(99), ...i32(2),
+         0x06, ...i32(100), ...lps("System.Int32"),
+         0x06, ...i32(101), ...lps("System.String")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([1]);
+      expect(result.methodSignature).toEqual(["System.Int32", "System.String"]);
+    });
+
+    it("resolves a forward-referenced CallContext value via fixup (line 582 callback)", () => {
+      // messageEnum: ArgsIsArray (0x04) | ContextInArray (0x40) = 0x44
+      // argCount = length(2) - hasCtx(1) = 1; context element is a forward MemberReference.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x44), ...svwc("Ctx"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x08, 0x08, ...i32(5)],                 // arg[0]: inline Int32
+        [0x09, ...i32(99)],                      // context element: MemberReference to id=99 (forward ref)
+        [0x06, ...i32(99), ...lps("late-ctx")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([5]);
+      expect(result.callContext).toBe("late-ctx");
+    });
+
+    it("resolves a forward-referenced MessageProperties array via fixup (line 588 callback)", () => {
+      // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) | PropertiesInArray (0x100) = 0x114
+      // argCount = length(2) - hasProps(1) = 1; properties element is a forward MemberReference.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x114), ...svwc("Props"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        [0x08, 0x01, 0x01],                      // arg[0]: inline Boolean true
+        [0x09, ...i32(99)],                      // properties element: MemberReference to id=99 (forward ref)
+        [0x10, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("prop")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([true]);
+      expect(result.messageProperties).toEqual(["prop"]);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -795,6 +865,194 @@ describe("deserialize", () => {
       );
       const result = deserialize(stream) as NrbfMethodCall;
       expect(result.args).toEqual(["late"]);
+    });
+
+    it("resolves a forward-referenced GenericMethod array via fixup (line 606 callback)", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) | GenericMethod (0x8000) = 0x8018
+      // Element 1 is a MemberReference to the generic type args array defined after the call array.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x8018), ...svwc("Generic"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],            // call array: objectId=2, length=2
+        // element 0: args sub-array (inline)
+        [0x10, ...i32(3), ...i32(1), 0x08, 0x08, ...i32(42)],
+        // element 1: MemberReference to id=99 (forward ref to generic type args)
+        [0x09, ...i32(99)],
+        // id=99: ArraySingleString with generic type names
+        [0x11, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual([42]);
+      expect(result.genericTypeArguments).toEqual(["System.Int32"]);
+    });
+
+    it("resolves a forward-referenced MethodSignature array via fixup (line 612 callback)", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) | MethodSignatureInArray (0x80) = 0x98
+      // Element 1 is a MemberReference to the signature array defined after the call array.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x98), ...svwc("Sig"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array (inline)
+        [0x10, ...i32(3), ...i32(1), 0x06, ...i32(4), ...lps("arg")],
+        // element 1: MemberReference to id=99 (forward ref to signature)
+        [0x09, ...i32(99)],
+        // id=99: ArraySingleString with type names
+        [0x11, ...i32(99), ...i32(2),
+         0x06, ...i32(100), ...lps("System.String"),
+         0x06, ...i32(101), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["arg"]);
+      expect(result.methodSignature).toEqual(["System.String", "System.Int32"]);
+    });
+
+    it("resolves a forward-referenced CallContext value via fixup (line 618 callback)", () => {
+      // messageEnum: ArgsInArray (0x08) | ContextInArray (0x40) = 0x48
+      // Element 1 is a MemberReference to the context string defined after the call array.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x48), ...svwc("Ctx"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array (inline)
+        [0x10, ...i32(3), ...i32(1), 0x06, ...i32(4), ...lps("arg")],
+        // element 1: MemberReference to id=99 (forward ref to context)
+        [0x09, ...i32(99)],
+        // id=99: BinaryObjectString
+        [0x06, ...i32(99), ...lps("late-ctx")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.callContext).toBe("late-ctx");
+    });
+
+    it("resolves a forward-referenced MessageProperties array via fixup (line 624 callback)", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) | PropertiesInArray (0x100) = 0x118
+      // Element 1 is a MemberReference to the properties array defined after the call array.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x118), ...svwc("Props"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array (inline)
+        [0x10, ...i32(3), ...i32(1), 0x06, ...i32(4), ...lps("arg")],
+        // element 1: MemberReference to id=99 (forward ref to properties)
+        [0x09, ...i32(99)],
+        // id=99: ArraySingleObject with one string element
+        [0x10, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("prop")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.messageProperties).toEqual(["prop"]);
+    });
+
+    it("resolves a forward-referenced drain-loop element via fixup (line 630 callback)", () => {
+      // messageEnum: ArgsInArray (0x08) | NoContext (0x10) = 0x18
+      // Call array length=2: element 0 is args sub-array, element 1 hits the drain loop as a forward ref.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x18), ...svwc("Drain"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],
+        // element 0: args sub-array (inline)
+        [0x10, ...i32(3), ...i32(1), 0x06, ...i32(4), ...lps("arg")],
+        // element 1: MemberReference to id=99 (forward ref, consumed by drain loop)
+        [0x09, ...i32(99)],
+        // id=99 defined after call array
+        [0x06, ...i32(99), ...lps("extra")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.args).toEqual(["arg"]);  // drain element is consumed but not exposed
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // BinaryMethodCall — no-args call-array path (else branch, lines 632–661)
+  // Neither ArgsIsArray nor ArgsInArray is set; the call array holds only
+  // optional metadata: GenericMethod, MethodSignature, CallContext, Properties.
+  // Each test puts a forward MemberReference in one slot so the fixup callback fires.
+  // ---------------------------------------------------------------------------
+
+  describe("BinaryMethodCall — no-args call-array path (else branch)", () => {
+    function svwc(s: string): number[] { return [0x12, ...lps(s)]; }
+
+    it("resolves a forward-referenced GenericMethod array via fixup (line 636 callback)", () => {
+      // messageEnum: GenericMethod (0x8000) | NoContext (0x10) = 0x8010
+      // Call array length=1; element 0 is a MemberReference to generic type args.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x8010), ...svwc("Gen"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],            // call array: objectId=2, length=1
+        [0x09, ...i32(99)],                      // element 0: forward ref to generic type args
+        [0x11, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.genericTypeArguments).toEqual(["System.Int32"]);
+    });
+
+    it("resolves a forward-referenced MethodSignature array via fixup (line 642 callback)", () => {
+      // messageEnum: MethodSignatureInArray (0x80) | NoContext (0x10) = 0x90
+      // Call array length=1; element 0 is a MemberReference to the signature array.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x90), ...svwc("Sig"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to signature array
+        [0x11, ...i32(99), ...i32(2),
+         0x06, ...i32(100), ...lps("System.String"),
+         0x06, ...i32(101), ...lps("System.Int32")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.methodSignature).toEqual(["System.String", "System.Int32"]);
+    });
+
+    it("resolves a forward-referenced CallContext value via fixup (line 648 callback)", () => {
+      // messageEnum: ContextInArray (0x40) = 0x40
+      // Call array length=1; element 0 is a MemberReference to the context string.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x40), ...svwc("Ctx"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to context string
+        [0x06, ...i32(99), ...lps("late-ctx")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.callContext).toBe("late-ctx");
+    });
+
+    it("resolves a forward-referenced MessageProperties array via fixup (line 654 callback)", () => {
+      // messageEnum: PropertiesInArray (0x100) | NoContext (0x10) = 0x110
+      // Call array length=1; element 0 is a MemberReference to the properties array.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x110), ...svwc("Props"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(1)],
+        [0x09, ...i32(99)],                      // forward ref to properties array
+        [0x10, ...i32(99), ...i32(1), 0x06, ...i32(100), ...lps("prop")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.messageProperties).toEqual(["prop"]);
+    });
+
+    it("resolves a forward-referenced drain-loop element via fixup (line 660 callback)", () => {
+      // messageEnum: ContextInArray (0x40) = 0x40
+      // Call array length=2: element 0 is context (inline), element 1 hits the drain loop as a forward ref.
+      const stream = buf(
+        header(1),
+        [0x15, ...i32(0x40), ...svwc("Drain"), ...svwc("ISvc")],
+        [0x10, ...i32(2), ...i32(2)],            // length=2
+        [0x06, ...i32(3), ...lps("ctx-val")],    // element 0: context (inline)
+        [0x09, ...i32(99)],                      // element 1: drain loop forward ref
+        [0x06, ...i32(99), ...lps("extra")],
+        END,
+      );
+      const result = deserialize(stream) as NrbfMethodCall;
+      expect(result.callContext).toBe("ctx-val");  // drain element is consumed but not exposed
     });
   });
 
