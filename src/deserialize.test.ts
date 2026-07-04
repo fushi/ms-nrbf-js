@@ -172,6 +172,42 @@ describe("deserialize", () => {
     });
   });
 
+  describe("ClassWithMembers", () => {
+    it("deserializes a library class without member type metadata", () => {
+      // ClassWithMembers (0x03): ClassInfo + libraryId, no MemberTypeInfo.
+      // Members are read via readMembersUntyped — each value is a full record.
+      const stream = buf(
+        header(1),
+        [0x0c, ...i32(2), ...lps("Acme.Lib")],  // BinaryLibrary id=2
+        [0x03, ...i32(1), ...lps("Acme.Widget"), ...i32(1), ...lps("Label"), ...i32(2)],
+        [0x06, ...i32(3), ...lps("Hello")],      // member "Label": BinaryObjectString
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject;
+      expect(result.typeName).toBe("Acme.Widget");
+      expect(result.libraryName).toBe("Acme.Lib");
+      expect(result.memberTypes).toBeUndefined();
+      expect(result.members["Label"]).toBe("Hello");
+    });
+
+    it("deserializes a system class (SystemClassWithMembers) without member type metadata", () => {
+      // SystemClassWithMembers (0x02): ClassInfo only, no libraryId, no MemberTypeInfo.
+      const stream = buf(
+        header(1),
+        [0x02, ...i32(1), ...lps("MyLib.Point"), ...i32(2), ...lps("X"), ...lps("Y")],
+        [0x08, 0x08, ...i32(10)],  // X: MemberPrimitiveTyped Int32=10
+        [0x08, 0x08, ...i32(20)],  // Y: MemberPrimitiveTyped Int32=20
+        END,
+      );
+      const result = deserialize(stream) as NrbfObject;
+      expect(result.typeName).toBe("MyLib.Point");
+      expect(result.libraryName).toBeUndefined();
+      expect(result.memberTypes).toBeUndefined();
+      expect(result.members["X"]).toBe(10);
+      expect(result.members["Y"]).toBe(20);
+    });
+  });
+
   describe("ClassWithId", () => {
     it("uses readMembersUntyped when ClassWithId follows an untyped class (no memberTypeInfo)", () => {
       // SystemClassWithMembers stores metadata without memberTypeInfo; ClassWithId must use readMembersUntyped

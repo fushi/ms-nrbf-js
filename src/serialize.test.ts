@@ -1606,4 +1606,88 @@ describe("serialize", () => {
       expect(result.elements).toEqual([]);
     });
   });
+
+  describe("semantic round-trip — alternative wire encodings", () => {
+    // Verify that streams using ClassWithMembers / SystemClassWithMembers / ArgsInArray
+    // decode correctly and that re-serialization preserves content even though the
+    // serializer always emits the canonical WithTypes / ArgsIsArray / ArgsInline variants.
+    function i32r(n: number): number[] {
+      const b = Buffer.alloc(4);
+      b.writeInt32LE(n, 0);
+      return [...b];
+    }
+    function lpsr(s: string): number[] {
+      const encoded = Buffer.from(s, "utf8");
+      const len = encoded.length;
+      return len < 128 ? [len, ...encoded] : [(len & 0x7f) | 0x80, len >> 7, ...encoded];
+    }
+    function bufr(...parts: number[][]): Buffer {
+      return Buffer.from(parts.flat());
+    }
+    const MEND = [0x0b];
+    function hdr(rootId: number): number[] {
+      return [0x00, ...i32r(rootId), ...i32r(-1), ...i32r(1), ...i32r(0)];
+    }
+
+    it("SystemClassWithMembers re-encodes as SystemClassWithMembersAndTypes — content preserved", () => {
+      // SystemClassWithMembers carries no member type info; the serializer re-emits it as
+      // SystemClassWithMembersAndTypes (type info inferred from values), so bytes differ.
+      const stream = bufr(
+        hdr(1),
+        [0x02, ...i32r(1), ...lpsr("MyLib.Point"), ...i32r(2), ...lpsr("X"), ...lpsr("Y")],
+        [0x08, 0x08, ...i32r(10)],  // X: MemberPrimitiveTyped Int32=10
+        [0x08, 0x08, ...i32r(20)],  // Y: MemberPrimitiveTyped Int32=20
+        MEND,
+      );
+      const first = deserialize(stream) as NrbfObject;
+      const reencoded = deserialize(serialize(first)) as NrbfObject;
+      expect(reencoded.typeName).toBe("MyLib.Point");
+      expect(reencoded.libraryName).toBeUndefined();
+      expect(reencoded.members["X"]).toBe(10);
+      expect(reencoded.members["Y"]).toBe(20);
+      expect(serialize(reencoded)).not.toEqual(stream);
+    });
+
+    it("ClassWithMembers re-encodes as ClassWithMembersAndTypes — content preserved", () => {
+      // ClassWithMembers carries no member type info; the serializer re-emits it as
+      // ClassWithMembersAndTypes (type info inferred from values), so bytes differ.
+      const stream = bufr(
+        hdr(1),
+        [0x0c, ...i32r(2), ...lpsr("Acme.Lib")],  // BinaryLibrary id=2
+        [0x03, ...i32r(1), ...lpsr("Acme.Widget"), ...i32r(1), ...lpsr("Label"), ...i32r(2)],
+        [0x06, ...i32r(3), ...lpsr("Hello")],      // member "Label": BinaryObjectString
+        MEND,
+      );
+      const first = deserialize(stream) as NrbfObject;
+      const reencoded = deserialize(serialize(first)) as NrbfObject;
+      expect(reencoded.typeName).toBe("Acme.Widget");
+      expect(reencoded.libraryName).toBe("Acme.Lib");
+      expect(reencoded.members["Label"]).toBe("Hello");
+      expect(serialize(reencoded)).not.toEqual(stream);
+    });
+
+    it("MethodCall ArgsInArray re-encodes as ArgsInline — content preserved", () => {
+      // ArgsInArray wraps args in a nested sub-array (element 0 of the call array).
+      // After deserialization the args are a plain JS array; simple args re-serialize as
+      // ArgsInline (no call array at all), so bytes differ.
+      // flags = NoContext(0x10) | ArgsInArray(0x08) = 0x18
+      const stream = bufr(
+        hdr(1),
+        [0x15, ...i32r(0x18), 0x12, ...lpsr("DoWork"), 0x12, ...lpsr("ISvc")],  // MethodCall
+        [0x10, ...i32r(1), ...i32r(1)],   // outer call array: id=1, length=1
+        [0x10, ...i32r(2), ...i32r(2),    // nested args sub-array: id=2, length=2
+         0x06, ...i32r(3), ...lpsr("hello"),  // arg 0: "hello"
+         0x08, 0x08, ...i32r(42)],            // arg 1: Int32 42
+        MEND,
+      );
+      const first = deserialize(stream) as NrbfMethodCall;
+      expect(first.args).toEqual(["hello", 42]);
+      const reencoded = deserialize(serialize(first)) as NrbfMethodCall;
+      expect(reencoded.kind).toBe("MethodCall");
+      expect(reencoded.methodName).toBe("DoWork");
+      expect(reencoded.typeName).toBe("ISvc");
+      expect(reencoded.args).toEqual(["hello", 42]);
+      expect(serialize(reencoded)).not.toEqual(stream);
+    });
+  });
 });
