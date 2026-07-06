@@ -95,8 +95,8 @@ class Deserializer {
       case RecordTypeEnumeration.ClassWithId:              return this.readClassWithId();
       case RecordTypeEnumeration.BinaryArray:              return this.readBinaryArray();
       case RecordTypeEnumeration.ArraySinglePrimitive:     return this.readArraySinglePrimitive();
-      case RecordTypeEnumeration.ArraySingleObject:        return this.readArraySingleObject();
-      case RecordTypeEnumeration.ArraySingleString:        return this.readArraySingleString();
+      case RecordTypeEnumeration.ArraySingleObject:        return this.readArraySingleGeneric();
+      case RecordTypeEnumeration.ArraySingleString:        return this.readArraySingleGeneric();
       case RecordTypeEnumeration.MemberReference:          return this.readMemberReference();
       case RecordTypeEnumeration.MemberPrimitiveTyped:     return this.readMemberPrimitiveTyped();
       case RecordTypeEnumeration.ObjectNull:               return null;
@@ -362,16 +362,7 @@ class Deserializer {
     return arr;
   }
 
-  private readArraySingleObject(): NrbfValue[] {
-    const objectId = this.r.readInt32();
-    const length = this.r.readInt32();
-    const arr: NrbfValue[] = [];
-    this.objects.set(objectId, arr);
-    this.readArrayElements(arr, length);
-    return arr;
-  }
-
-  private readArraySingleString(): NrbfValue[] {
+  private readArraySingleGeneric(): NrbfValue[] {
     const objectId = this.r.readInt32();
     const length = this.r.readInt32();
     const arr: NrbfValue[] = [];
