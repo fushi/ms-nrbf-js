@@ -470,25 +470,33 @@ class Deserializer {
   // Method invocation records (§2.2.3)
   // -------------------------------------------------------------------------
 
+  private readInlineArgsAndContext(
+    messageEnum: number,
+    result: NrbfMethodCall | NrbfMethodReturn,
+  ): void {
+    if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
+    if (messageEnum & MessageFlags.ArgsInline) {
+      const [values, types] = this.readArrayOfValueWithCodeTyped();
+      result.args = values;
+      result.argTypes = types;
+    }
+  }
+
   private readBinaryMethodCall(): NrbfMethodCall {
     const messageEnum = this.r.readInt32();
     const methodName = this.readStringValueWithCode();
     const typeName = this.readStringValueWithCode();
 
     const result: NrbfMethodCall = { kind: "MethodCall", methodName, typeName };
-    if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
-    if (messageEnum & MessageFlags.ArgsInline) {
-      const [values, types] = this.readArrayOfValueWithCodeTyped();
-      result.args = values;
-      result.argTypes = types;
-    } else if (
+    this.readInlineArgsAndContext(messageEnum, result);
+    if (!(messageEnum & MessageFlags.ArgsInline) && (
       (messageEnum & MessageFlags.ArgsIsArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
       (messageEnum & MessageFlags.ContextInArray) ||
       (messageEnum & MessageFlags.GenericMethod) ||
       (messageEnum & MessageFlags.MethodSignatureInArray) ||
       (messageEnum & MessageFlags.PropertiesInArray)
-    ) {
+    )) {
       this.readCallArray(messageEnum, result);
     }
     return result;
@@ -503,18 +511,14 @@ class Deserializer {
       result.returnType = type;
     }
     if (messageEnum & MessageFlags.NoReturnValue) result.returnValue = null;
-    if (messageEnum & MessageFlags.ContextInline) result.callContext = this.readStringValueWithCode();
-    if (messageEnum & MessageFlags.ArgsInline) {
-      const [values, types] = this.readArrayOfValueWithCodeTyped();
-      result.args = values;
-      result.argTypes = types;
-    } else if (
+    this.readInlineArgsAndContext(messageEnum, result);
+    if (!(messageEnum & MessageFlags.ArgsInline) && (
       (messageEnum & MessageFlags.ReturnValueInArray) ||
       (messageEnum & MessageFlags.ArgsInArray) ||
       (messageEnum & MessageFlags.ExceptionInArray) ||
       (messageEnum & MessageFlags.ContextInArray) ||
       (messageEnum & MessageFlags.PropertiesInArray)
-    ) {
+    )) {
       this.readCallArray(messageEnum, result);
     }
     return result;
