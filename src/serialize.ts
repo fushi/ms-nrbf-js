@@ -164,6 +164,15 @@ class Serializer {
     }
   }
 
+  // Allocates the call-array object ID (when needed), writes the stream header, and emits
+  // BinaryLibrary records. Returns the allocated ID, or undefined when no call array is needed.
+  private allocCallArray(needsCallArray: boolean): number | undefined {
+    const callArrayId = needsCallArray ? this.nextId++ : undefined;
+    this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
+    if (needsCallArray) this.writeBinaryLibraries();
+    return callArrayId;
+  }
+
   private runMethodCall(call: NrbfMethodCall): Buffer {
     const hasComplexArgs =
       call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v));
@@ -199,12 +208,7 @@ class Serializer {
       flags |= MessageFlags.PropertiesInArray;
     }
 
-    const callArrayId = needsCallArray ? this.nextId++ : undefined;
-    this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
-
-    if (needsCallArray) {
-      this.writeBinaryLibraries();
-    }
+    const callArrayId = this.allocCallArray(needsCallArray);
 
     this.w.writeByte(RecordTypeEnumeration.MethodCall);
     this.w.writeInt32(flags);
@@ -213,7 +217,7 @@ class Serializer {
     if (call.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(call.callContext as string);
     if (!hasComplexArgs && call.args !== undefined) this.writeArrayOfValueWithCode(call.args, call.argTypes);
 
-    if (needsCallArray && callArrayId !== undefined) {
+    if (callArrayId !== undefined) {
       // §2.2.3.2 MethodCallArray order: args (direct for ArgsIsArray), GenericTypeArgs, MethodSignature, CallContext, MessageProperties.
       const elementCount =
         (hasComplexArgs ? call.args!.length : 0) + (hasGeneric ? 1 : 0) + (hasSig ? 1 : 0) + (ctxIsObject ? 1 : 0) + (call.messageProperties !== undefined ? 1 : 0);
@@ -272,12 +276,7 @@ class Serializer {
       : MessageFlags.NoContext;
     flags |= ret.messageProperties !== undefined ? MessageFlags.PropertiesInArray : 0;
 
-    const callArrayId = needsCallArray ? this.nextId++ : undefined;
-    this.writeHeader(callArrayId ?? 0, callArrayId !== undefined ? -1 : 0);
-
-    if (needsCallArray) {
-      this.writeBinaryLibraries();
-    }
+    const callArrayId = this.allocCallArray(needsCallArray);
 
     this.w.writeByte(RecordTypeEnumeration.MethodReturn);
     this.w.writeInt32(flags);
@@ -285,7 +284,7 @@ class Serializer {
     if (ret.callContext !== undefined && !ctxIsObject) this.writeStringValueWithCode(ret.callContext as string);
     if (!hasException && ret.args !== undefined && !hasComplexArgs) this.writeArrayOfValueWithCode(ret.args, ret.argTypes);
 
-    if (needsCallArray && callArrayId !== undefined) {
+    if (callArrayId !== undefined) {
       // MethodReturnCallArray order: ReturnValue, OutputArguments, Exception, CallContext, Properties (§2.2.3.4).
       const elementCount =
         (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0) + (hasException ? 1 : 0) + (ctxIsObject ? 1 : 0) + (ret.messageProperties !== undefined ? 1 : 0);
