@@ -132,12 +132,7 @@ class Serializer {
     // Pre-scan to collect and register all libraryNames before writing any records.
     this.collectLibraries(value, new Set());
 
-    // SerializationHeaderRecord
-    this.w.writeByte(RecordTypeEnumeration.SerializedStreamHeader);
-    this.w.writeInt32(rootId);
-    this.w.writeInt32(-1); // headerId
-    this.w.writeInt32(1);  // majorVersion
-    this.w.writeInt32(0);  // minorVersion
+    this.writeHeader(rootId);
 
     // Write all BinaryLibrary records upfront
     this.writeBinaryLibraries();
