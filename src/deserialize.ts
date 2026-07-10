@@ -352,21 +352,23 @@ class Deserializer {
   // Array records
   // -------------------------------------------------------------------------
 
-  private readArraySinglePrimitive(): NrbfValue[] {
+  private initArray(): { objectId: number; length: number; arr: NrbfValue[] } {
     const objectId = this.r.readInt32();
     const length = this.r.readInt32();
-    const primitiveType = this.r.readByte() as PrimitiveTypeEnumeration;
     const arr: NrbfValue[] = [];
     this.objects.set(objectId, arr);
-    for (let i = 0; i < length; i++) arr.push(this.r.readPrimitive(primitiveType));
+    return { objectId, length, arr };
+  }
+
+  private readArraySinglePrimitive(): NrbfValue[] {
+    const { length, arr } = this.initArray();
+    const primitiveType = this.r.readByte() as PrimitiveTypeEnumeration;
+    this.fillArrayElements(arr, length, primitiveType);
     return arr;
   }
 
   private readArraySingleGeneric(): NrbfValue[] {
-    const objectId = this.r.readInt32();
-    const length = this.r.readInt32();
-    const arr: NrbfValue[] = [];
-    this.objects.set(objectId, arr);
+    const { length, arr } = this.initArray();
     this.readArrayElements(arr, length);
     return arr;
   }
@@ -556,10 +558,7 @@ class Deserializer {
       throw new Error(`Expected ArraySingleObject for callArray, got record type ${tag}`);
     }
 
-    const objectId = this.r.readInt32();
-    const length = this.r.readInt32();
-    const arr: NrbfValue[] = [];
-    this.objects.set(objectId, arr);
+    const { length, arr } = this.initArray();
 
     if (result.kind === "MethodCall") {
       if (messageEnum & MessageFlags.ArgsIsArray) {
