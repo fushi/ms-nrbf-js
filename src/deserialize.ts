@@ -411,11 +411,7 @@ class Deserializer {
     if (arrayTypeEnum === BinaryArrayTypeEnumeration.Single) {
       const arr: NrbfValue[] = [];
       this.objects.set(objectId, arr);
-      if (primitiveType !== undefined) {
-        for (let i = 0; i < totalElements; i++) arr.push(this.r.readPrimitive(primitiveType));
-      } else {
-        this.readArrayElements(arr, totalElements);
-      }
+      this.fillArrayElements(arr, totalElements, primitiveType);
       return arr;
     }
 
@@ -432,12 +428,16 @@ class Deserializer {
       elements,
     };
     this.objects.set(objectId, nrbfArr);
-    if (primitiveType !== undefined) {
-      for (let i = 0; i < totalElements; i++) elements.push(this.r.readPrimitive(primitiveType));
-    } else {
-      this.readArrayElements(elements, totalElements);
-    }
+    this.fillArrayElements(elements, totalElements, primitiveType);
     return nrbfArr;
+  }
+
+  private fillArrayElements(target: NrbfValue[], count: number, primitiveType: PrimitiveTypeEnumeration | undefined): void {
+    if (primitiveType !== undefined) {
+      for (let i = 0; i < count; i++) target.push(this.r.readPrimitive(primitiveType));
+    } else {
+      this.readArrayElements(target, count);
+    }
   }
 
   private readArrayElements(arr: NrbfValue[], remaining: number): void {
