@@ -139,8 +139,7 @@ class Serializer {
 
     this.writeValue(value, rootId);
 
-    this.w.writeByte(RecordTypeEnumeration.MessageEnd);
-    return this.w.toBuffer();
+    return this.finalize();
   }
 
   private writeHeader(rootId = 0, headerId = -1): void {
@@ -149,6 +148,11 @@ class Serializer {
     this.w.writeInt32(headerId);
     this.w.writeInt32(1);  // majorVersion
     this.w.writeInt32(0);  // minorVersion
+  }
+
+  private finalize(): Buffer {
+    this.w.writeByte(RecordTypeEnumeration.MessageEnd);
+    return this.w.toBuffer();
   }
 
   private writeBinaryLibraries(): void {
@@ -230,8 +234,7 @@ class Serializer {
       if (call.messageProperties !== undefined) this.writeAnyValue(call.messageProperties as NrbfValue);
     }
 
-    this.w.writeByte(RecordTypeEnumeration.MessageEnd);
-    return this.w.toBuffer();
+    return this.finalize();
   }
 
   private runMethodReturn(ret: NrbfMethodReturn): Buffer {
@@ -293,8 +296,7 @@ class Serializer {
       if (ret.messageProperties !== undefined) this.writeAnyValue(ret.messageProperties as NrbfValue);
     }
 
-    this.w.writeByte(RecordTypeEnumeration.MessageEnd);
-    return this.w.toBuffer();
+    return this.finalize();
   }
 
   private writeStringValueWithCode(s: string): void {
