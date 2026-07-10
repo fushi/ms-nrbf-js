@@ -526,6 +526,18 @@ class Deserializer {
 
   // §2.2.3.2 / §2.2.3.4 — reads the ArraySingleObject that immediately follows a method record
   // when ArgsIsArray, ArgsInArray, or ReturnValueInArray flags are set.
+  private readArgsInArray(arr: NrbfValue[], result: NrbfMethodCall | NrbfMethodReturn): void {
+    const idx = arr.length;
+    const val = this.readReferenceableValue((v) => {
+      arr[idx] = v;
+      /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
+      if (!Array.isArray(v)) throw new Error(`Expected array at args, got ${typeof v}`);
+      result.args = v;
+    });
+    arr.push(val);
+    if (Array.isArray(val)) result.args = val;
+  }
+
   private drainCallArray(arr: NrbfValue[], length: number): void {
     while (arr.length < length) {
       const idx = arr.length;
@@ -578,17 +590,7 @@ class Deserializer {
       } else {
         // ArgsInArray: element 0 is the nested args sub-array. Otherwise: no arg flags set.
         // Order per §2.2.3.2: ArgsInArray, GenericMethod, MethodSignature, CallContext, MessageProperties.
-        if (messageEnum & MessageFlags.ArgsInArray) {
-          const idx = arr.length;
-          const val = this.readReferenceableValue((v) => {
-            arr[idx] = v;
-            /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-            if (!Array.isArray(v)) throw new Error(`Expected array at args, got ${typeof v}`);
-            result.args = v;
-          });
-          arr.push(val);
-          if (Array.isArray(val)) result.args = val;
-        }
+        if (messageEnum & MessageFlags.ArgsInArray) this.readArgsInArray(arr, result);
         this.readOptionalGenericTypeArgs(messageEnum, arr, result);
         this.readOptionalMethodSignature(messageEnum, arr, result);
         this.readOptionalCallContext(messageEnum, arr, result);
@@ -603,17 +605,7 @@ class Deserializer {
         arr.push(val);
         result.returnValue = val;
       }
-      if (messageEnum & MessageFlags.ArgsInArray) {
-        const idx = arr.length;
-        const val = this.readReferenceableValue((v) => {
-          arr[idx] = v;
-          /* v8 ignore next -- valid NRBF guarantees an array here; non-array means a malformed stream */
-          if (!Array.isArray(v)) throw new Error(`Expected array at args, got ${typeof v}`);
-          result.args = v;
-        });
-        arr.push(val);
-        if (Array.isArray(val)) result.args = val;
-      }
+      if (messageEnum & MessageFlags.ArgsInArray) this.readArgsInArray(arr, result);
       if (messageEnum & MessageFlags.ExceptionInArray) {
         const idx = arr.length;
         const val = this.readReferenceableValue((v) => { arr[idx] = v; result.exception = v as NrbfObject; });
