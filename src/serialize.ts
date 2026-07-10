@@ -86,6 +86,22 @@ interface ClassSerializeMeta {
 // Serializer
 // ---------------------------------------------------------------------------
 
+function writeAdditionalInfo(w: BinaryWriter, entry: MemberTypeEntry): void {
+  switch (entry.binaryType) {
+    case BinaryTypeEnumeration.Primitive:
+    case BinaryTypeEnumeration.PrimitiveArray:
+      w.writeByte(entry.primitiveType);
+      break;
+    case BinaryTypeEnumeration.SystemClass:
+      w.writeLengthPrefixedString(entry.className);
+      break;
+    case BinaryTypeEnumeration.Class:
+      w.writeLengthPrefixedString(entry.classTypeInfo.typeName);
+      w.writeInt32(entry.classTypeInfo.libraryId);
+      break;
+  }
+}
+
 class Serializer {
   private readonly w = new BinaryWriter();
   private nextId = 1;
@@ -487,21 +503,7 @@ class Serializer {
     // Pass 1: all BinaryTypeEnums
     for (const e of entries) this.w.writeByte(e.binaryType);
     // Pass 2: AdditionalInfos (only for types that require them)
-    for (const e of entries) {
-      switch (e.binaryType) {
-        case BinaryTypeEnumeration.Primitive:
-        case BinaryTypeEnumeration.PrimitiveArray:
-          this.w.writeByte(e.primitiveType);
-          break;
-        case BinaryTypeEnumeration.SystemClass:
-          this.w.writeLengthPrefixedString(e.className);
-          break;
-        case BinaryTypeEnumeration.Class:
-          this.w.writeLengthPrefixedString(e.classTypeInfo.typeName);
-          this.w.writeInt32(e.classTypeInfo.libraryId);
-          break;
-      }
-    }
+    for (const e of entries) writeAdditionalInfo(this.w, e);
   }
 
   private writeClassInfo(objectId: number, typeName: string, memberNames: string[]): void {
@@ -576,6 +578,17 @@ class Serializer {
     return { binaryType: BinaryTypeEnumeration.SystemClass, className: typeName };
   }
 
+  private elementEntry(arr: NrbfArray): MemberTypeEntry {
+    const bt = arr.elementBinaryType;
+    if (bt === BinaryTypeEnumeration.Primitive || bt === BinaryTypeEnumeration.PrimitiveArray)
+      return { binaryType: bt, primitiveType: arr.elementPrimitiveType! };
+    if (bt === BinaryTypeEnumeration.SystemClass)
+      return { binaryType: bt, className: arr.elementClassName! };
+    if (bt === BinaryTypeEnumeration.Class)
+      return { binaryType: bt, classTypeInfo: { typeName: arr.elementClassName!, libraryId: this.libraryIds.get(arr.elementLibraryName!) ?? 0 } };
+    return { binaryType: bt } as MemberTypeEntry;
+  }
+
   private writeNrbfArray(arr: NrbfArray, objectId: number): void {
     const isOffset =
       arr.arrayType === BinaryArrayTypeEnumeration.SingleOffset ||
@@ -591,19 +604,7 @@ class Serializer {
       for (const lb of arr.lowerBounds) this.w.writeInt32(lb);
     }
     this.w.writeByte(arr.elementBinaryType);
-    switch (arr.elementBinaryType) {
-      case BinaryTypeEnumeration.Primitive:
-      case BinaryTypeEnumeration.PrimitiveArray:
-        this.w.writeByte(arr.elementPrimitiveType!);
-        break;
-      case BinaryTypeEnumeration.SystemClass:
-        this.w.writeLengthPrefixedString(arr.elementClassName!);
-        break;
-      case BinaryTypeEnumeration.Class:
-        this.w.writeLengthPrefixedString(arr.elementClassName!);
-        this.w.writeInt32(this.libraryIds.get(arr.elementLibraryName!) ?? 0);
-        break;
-    }
+    writeAdditionalInfo(this.w, this.elementEntry(arr));
 
     if (arr.elementBinaryType === BinaryTypeEnumeration.Primitive) {
       for (const el of arr.elements) this.w.writePrimitive(arr.elementPrimitiveType!, el as PrimitiveValue);
@@ -641,12 +642,7 @@ class Serializer {
       this.w.writeInt32(arr.length); // lengths[0]
       // no lowerBounds for Single
       this.w.writeByte(classEntry.binaryType);
-      if (classEntry.binaryType === BinaryTypeEnumeration.Class) {
-        this.w.writeLengthPrefixedString(classEntry.classTypeInfo.typeName);
-        this.w.writeInt32(classEntry.classTypeInfo.libraryId);
-      } else {
-        this.w.writeLengthPrefixedString(classEntry.className);
-      }
+      writeAdditionalInfo(this.w, classEntry);
       this.writeArrayElements(arr);
       return;
     }

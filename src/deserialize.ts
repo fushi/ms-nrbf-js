@@ -30,6 +30,20 @@ interface Fixup {
   idRef: number;
 }
 
+function readAdditionalInfo(r: BinaryReader, binaryType: BinaryTypeEnumeration): MemberTypeEntry {
+  switch (binaryType) {
+    case BinaryTypeEnumeration.Primitive:
+    case BinaryTypeEnumeration.PrimitiveArray:
+      return { binaryType, primitiveType: r.readByte() as PrimitiveTypeEnumeration };
+    case BinaryTypeEnumeration.SystemClass:
+      return { binaryType, className: r.readLengthPrefixedString() };
+    case BinaryTypeEnumeration.Class:
+      return { binaryType, classTypeInfo: { typeName: r.readLengthPrefixedString(), libraryId: r.readInt32() } };
+    default:
+      return { binaryType } as MemberTypeEntry;
+  }
+}
+
 class Deserializer {
   private readonly r: BinaryReader;
   private readonly objects = new Map<number, NrbfValue>();
@@ -196,22 +210,7 @@ class Deserializer {
     for (let i = 0; i < count; i++) binaryTypes.push(this.r.readByte() as BinaryTypeEnumeration);
 
     const entries: MemberTypeEntry[] = [];
-    for (const binaryType of binaryTypes) {
-      switch (binaryType) {
-        case BinaryTypeEnumeration.Primitive:
-        case BinaryTypeEnumeration.PrimitiveArray:
-          entries.push({ binaryType, primitiveType: this.r.readByte() as PrimitiveTypeEnumeration });
-          break;
-        case BinaryTypeEnumeration.SystemClass:
-          entries.push({ binaryType, className: this.r.readLengthPrefixedString() });
-          break;
-        case BinaryTypeEnumeration.Class:
-          entries.push({ binaryType, classTypeInfo: { typeName: this.r.readLengthPrefixedString(), libraryId: this.r.readInt32() } });
-          break;
-        default:
-          entries.push({ binaryType } as MemberTypeEntry);
-      }
-    }
+    for (const binaryType of binaryTypes) entries.push(readAdditionalInfo(this.r, binaryType));
     return entries;
   }
 
@@ -358,24 +357,12 @@ class Deserializer {
     if (hasLowerBounds) for (let i = 0; i < rank; i++) lowerBounds.push(this.r.readInt32());
 
     const typeEnum = this.r.readByte() as BinaryTypeEnumeration;
-    let primitiveType: PrimitiveTypeEnumeration | undefined;
-    let elementClassName: string | undefined;
-    let elementLibraryName: string | undefined;
-    switch (typeEnum) {
-      case BinaryTypeEnumeration.Primitive:
-      case BinaryTypeEnumeration.PrimitiveArray:
-        primitiveType = this.r.readByte() as PrimitiveTypeEnumeration;
-        break;
-      case BinaryTypeEnumeration.SystemClass:
-        elementClassName = this.r.readLengthPrefixedString();
-        break;
-      case BinaryTypeEnumeration.Class: {
-        elementClassName = this.r.readLengthPrefixedString();
-        const libraryId = this.r.readInt32();
-        elementLibraryName = this.libraries.get(libraryId);
-        break;
-      }
-    }
+    const typeInfo = readAdditionalInfo(this.r, typeEnum);
+    const primitiveType = 'primitiveType' in typeInfo ? typeInfo.primitiveType : undefined;
+    const elementClassName = 'className' in typeInfo ? typeInfo.className
+      : 'classTypeInfo' in typeInfo ? typeInfo.classTypeInfo.typeName : undefined;
+    const elementLibraryName = 'classTypeInfo' in typeInfo
+      ? this.libraries.get(typeInfo.classTypeInfo.libraryId) : undefined;
 
     const totalElements = lengths.reduce((a, b) => a * b, 1);
 
