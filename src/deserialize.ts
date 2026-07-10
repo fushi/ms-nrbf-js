@@ -88,10 +88,10 @@ class Deserializer {
     switch (tag) {
       case RecordTypeEnumeration.BinaryLibrary:            return this.readBinaryLibrary();
       case RecordTypeEnumeration.BinaryObjectString:       return this.readBinaryObjectString();
-      case RecordTypeEnumeration.ClassWithMembersAndTypes: return this.readClassWithMembersAndTypes();
-      case RecordTypeEnumeration.SystemClassWithMembersAndTypes: return this.readSystemClassWithMembersAndTypes();
-      case RecordTypeEnumeration.ClassWithMembers:         return this.readClassWithMembers();
-      case RecordTypeEnumeration.SystemClassWithMembers:   return this.readSystemClassWithMembers();
+      case RecordTypeEnumeration.ClassWithMembersAndTypes:         return this.readClassRecord(true, false);
+      case RecordTypeEnumeration.SystemClassWithMembersAndTypes:   return this.readClassRecord(true, true);
+      case RecordTypeEnumeration.ClassWithMembers:                 return this.readClassRecord(false, false);
+      case RecordTypeEnumeration.SystemClassWithMembers:           return this.readClassRecord(false, true);
       case RecordTypeEnumeration.ClassWithId:              return this.readClassWithId();
       case RecordTypeEnumeration.BinaryArray:              return this.readBinaryArray();
       case RecordTypeEnumeration.ArraySinglePrimitive:     return this.readArraySinglePrimitive();
@@ -277,53 +277,23 @@ class Deserializer {
   // Class records
   // -------------------------------------------------------------------------
 
-  private readClassWithMembersAndTypes(): NrbfObject {
+  private readClassRecord(hasTypes: boolean, isSystem: boolean): NrbfObject {
     const classInfo = this.readClassInfo();
-    const memberTypeInfo = this.readMemberTypeInfo(classInfo.memberNames.length);
-    const libraryId = this.r.readInt32();
-    this.storeClassMeta({ classInfo, memberTypeInfo, libraryId }, `${classInfo.name}@${libraryId}`);
+    const memberTypeInfo = hasTypes ? this.readMemberTypeInfo(classInfo.memberNames.length) : undefined;
+    const libraryId = isSystem ? undefined : this.r.readInt32();
+    const nameKey = isSystem ? classInfo.name : `${classInfo.name}@${libraryId}`;
+    this.storeClassMeta({ classInfo, ...(memberTypeInfo !== undefined && { memberTypeInfo }), ...(libraryId !== undefined && { libraryId }) }, nameKey);
 
     const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    obj.libraryName = this.resolveLibraryName(libraryId);
-    const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
-    if (memberTypes !== undefined) obj.memberTypes = memberTypes;
+    if (libraryId !== undefined) obj.libraryName = this.resolveLibraryName(libraryId);
+    if (memberTypeInfo !== undefined) {
+      const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
+      if (memberTypes !== undefined) obj.memberTypes = memberTypes;
+    }
     this.objects.set(classInfo.objectId, obj);
-    obj.members = this.readMembers(classInfo, memberTypeInfo);
-    return obj;
-  }
-
-  private readSystemClassWithMembersAndTypes(): NrbfObject {
-    const classInfo = this.readClassInfo();
-    const memberTypeInfo = this.readMemberTypeInfo(classInfo.memberNames.length);
-    this.storeClassMeta({ classInfo, memberTypeInfo }, classInfo.name);
-
-    const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
-    if (memberTypes !== undefined) obj.memberTypes = memberTypes;
-    this.objects.set(classInfo.objectId, obj);
-    obj.members = this.readMembers(classInfo, memberTypeInfo);
-    return obj;
-  }
-
-  private readClassWithMembers(): NrbfObject {
-    const classInfo = this.readClassInfo();
-    const libraryId = this.r.readInt32();
-    this.storeClassMeta({ classInfo, libraryId }, `${classInfo.name}@${libraryId}`);
-
-    const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    obj.libraryName = this.resolveLibraryName(libraryId);
-    this.objects.set(classInfo.objectId, obj);
-    obj.members = this.readMembersUntyped(classInfo);
-    return obj;
-  }
-
-  private readSystemClassWithMembers(): NrbfObject {
-    const classInfo = this.readClassInfo();
-    this.storeClassMeta({ classInfo }, classInfo.name);
-
-    const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    this.objects.set(classInfo.objectId, obj);
-    obj.members = this.readMembersUntyped(classInfo);
+    obj.members = memberTypeInfo !== undefined
+      ? this.readMembers(classInfo, memberTypeInfo)
+      : this.readMembersUntyped(classInfo);
     return obj;
   }
 
