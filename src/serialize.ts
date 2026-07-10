@@ -22,34 +22,20 @@ import type {
 // Type inference helpers
 // ---------------------------------------------------------------------------
 
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
 function isDateTime(v: unknown): v is DateTime {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    !Array.isArray(v) &&
-    "ticks" in v &&
-    "kind" in v
-  );
+  return isPlainObject(v) && "ticks" in v && "kind" in v;
 }
 
 function isNrbfObject(v: unknown): v is NrbfObject {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    !Array.isArray(v) &&
-    "typeName" in v &&
-    "members" in v
-  );
+  return isPlainObject(v) && "typeName" in v && "members" in v;
 }
 
 function isNrbfArray(v: unknown): v is NrbfArray {
-  return (
-    typeof v === "object" &&
-    v !== null &&
-    !Array.isArray(v) &&
-    "arrayType" in v &&
-    "elements" in v
-  );
+  return isPlainObject(v) && "arrayType" in v && "elements" in v;
 }
 
 // Map an NrbfValue to the PrimitiveTypeEnumeration that describes it.
