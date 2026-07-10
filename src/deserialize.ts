@@ -283,17 +283,7 @@ class Deserializer {
     const nameKey = isSystem ? classInfo.name : `${classInfo.name}@${libraryId}`;
     this.storeClassMeta({ classInfo, ...(memberTypeInfo !== undefined && { memberTypeInfo }), ...(libraryId !== undefined && { libraryId }) }, nameKey);
 
-    const obj: NrbfObject = { typeName: classInfo.name, members: {} };
-    if (libraryId !== undefined) obj.libraryName = this.resolveLibraryName(libraryId);
-    if (memberTypeInfo !== undefined) {
-      const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
-      if (memberTypes !== undefined) obj.memberTypes = memberTypes;
-    }
-    this.objects.set(classInfo.objectId, obj);
-    obj.members = memberTypeInfo !== undefined
-      ? this.readMembers(classInfo, memberTypeInfo)
-      : this.readMembersUntyped(classInfo);
-    return obj;
+    return this.buildNrbfObject(classInfo.objectId, classInfo, memberTypeInfo, libraryId);
   }
 
   private readClassWithId(): NrbfObject {
@@ -302,18 +292,25 @@ class Deserializer {
     const meta = this.classesByObjectId.get(metadataId);
     if (!meta) throw new Error(`ClassWithId: no metadata found for metadataId=${metadataId}`);
 
-    const obj: NrbfObject = { typeName: meta.classInfo.name, members: {} };
-    if (meta.libraryId !== undefined) {
-      obj.libraryName = this.resolveLibraryName(meta.libraryId);
-    }
-    if (meta.memberTypeInfo) {
-      const memberTypes = this.extractMemberTypes(meta.classInfo, meta.memberTypeInfo);
+    return this.buildNrbfObject(objectId, meta.classInfo, meta.memberTypeInfo, meta.libraryId);
+  }
+
+  private buildNrbfObject(
+    objectId: number,
+    classInfo: ClassInfo,
+    memberTypeInfo: MemberTypeInfo | undefined,
+    libraryId: number | undefined,
+  ): NrbfObject {
+    const obj: NrbfObject = { typeName: classInfo.name, members: {} };
+    if (libraryId !== undefined) obj.libraryName = this.resolveLibraryName(libraryId);
+    if (memberTypeInfo !== undefined) {
+      const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
       if (memberTypes !== undefined) obj.memberTypes = memberTypes;
     }
     this.objects.set(objectId, obj);
-    obj.members = meta.memberTypeInfo
-      ? this.readMembers(meta.classInfo, meta.memberTypeInfo)
-      : this.readMembersUntyped(meta.classInfo);
+    obj.members = memberTypeInfo !== undefined
+      ? this.readMembers(classInfo, memberTypeInfo)
+      : this.readMembersUntyped(classInfo);
     return obj;
   }
 
