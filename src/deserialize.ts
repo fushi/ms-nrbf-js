@@ -526,6 +526,13 @@ class Deserializer {
 
   // §2.2.3.2 / §2.2.3.4 — reads the ArraySingleObject that immediately follows a method record
   // when ArgsIsArray, ArgsInArray, or ReturnValueInArray flags are set.
+  private drainCallArray(arr: NrbfValue[], length: number): void {
+    while (arr.length < length) {
+      const idx = arr.length;
+      arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
+    }
+  }
+
   private readCallArray(messageEnum: number, result: NrbfMethodCall | NrbfMethodReturn): void {
     // Skip any leading BinaryLibrary records (grammar: callArray = 0*1(BinaryLibrary) ArraySingleObject ...)
     let tag = this.r.readByte() as RecordTypeEnumeration;
@@ -586,10 +593,7 @@ class Deserializer {
         this.readOptionalMethodSignature(messageEnum, arr, result);
         this.readOptionalCallContext(messageEnum, arr, result);
         this.readOptionalMessageProperties(messageEnum, arr, result);
-        while (arr.length < length) {
-          const idx = arr.length;
-          arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
-        }
+        this.drainCallArray(arr, length);
       }
     } else {
       // MethodReturn: items in order per §2.2.3.4 — ReturnValue, OutputArguments, Exception, CallContext, Properties.
@@ -618,11 +622,7 @@ class Deserializer {
       }
       this.readOptionalCallContext(messageEnum, arr, result);
       this.readOptionalMessageProperties(messageEnum, arr, result);
-      // Drain any remaining elements.
-      while (arr.length < length) {
-        const idx = arr.length;
-        arr.push(this.readReferenceableValue((v) => { arr[idx] = v; }));
-      }
+      this.drainCallArray(arr, length);
     }
   }
 
