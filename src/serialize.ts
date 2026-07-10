@@ -38,6 +38,10 @@ function isNrbfArray(v: unknown): v is NrbfArray {
   return isPlainObject(v) && "arrayType" in v && "elements" in v;
 }
 
+function isComplexValue(v: NrbfValue): boolean {
+  return Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v);
+}
+
 // Map an NrbfValue to the PrimitiveTypeEnumeration that describes it.
 // Returns undefined when the value is a string, object, or array.
 function inferPrimitiveType(v: NrbfValue): PrimitiveTypeEnumeration | undefined {
@@ -176,7 +180,7 @@ class Serializer {
 
   private runMethodCall(call: NrbfMethodCall): Buffer {
     const hasComplexArgs =
-      call.args !== undefined && call.args.some((v) => Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v));
+      call.args !== undefined && call.args.some(isComplexValue);
     const ctxIsObject = call.callContext !== undefined && isNrbfObject(call.callContext);
     const hasGeneric = call.genericTypeArguments !== undefined;
     const hasSig = call.methodSignature !== undefined;
@@ -243,9 +247,9 @@ class Serializer {
     const hasException = ret.exception !== undefined;
     // ExceptionInArray is exclusive with Return and Args categories per spec §2.2.1.1.
     const hasComplexReturn = !hasException &&
-      ret.returnValue !== undefined && (Array.isArray(ret.returnValue) || isNrbfArray(ret.returnValue) || isNrbfObject(ret.returnValue));
+      ret.returnValue !== undefined && isComplexValue(ret.returnValue);
     const hasComplexArgs = !hasException &&
-      ret.args !== undefined && ret.args.some((v) => Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v));
+      ret.args !== undefined && ret.args.some(isComplexValue);
     const ctxIsObject = ret.callContext !== undefined && isNrbfObject(ret.callContext);
     const needsCallArray = hasComplexReturn || hasComplexArgs || hasException || ctxIsObject || ret.messageProperties !== undefined;
 
