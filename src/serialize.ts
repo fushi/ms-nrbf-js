@@ -226,9 +226,7 @@ class Serializer {
       // §2.2.3.2 MethodCallArray order: args (direct for ArgsIsArray), GenericTypeArgs, MethodSignature, CallContext, MessageProperties.
       const elementCount =
         (hasComplexArgs ? call.args!.length : 0) + (hasGeneric ? 1 : 0) + (hasSig ? 1 : 0) + (ctxIsObject ? 1 : 0) + (call.messageProperties !== undefined ? 1 : 0);
-      this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
-      this.w.writeInt32(callArrayId);
-      this.w.writeInt32(elementCount);
+      this.writeArraySingleObjectHeader(callArrayId, elementCount);
       if (hasComplexArgs && call.args !== undefined) {
         for (let i = 0; i < call.args.length; i++) {
           this.writeAnyValue(call.args[i] as NrbfValue, call.argTypes?.[i]);
@@ -292,9 +290,7 @@ class Serializer {
       // MethodReturnCallArray order: ReturnValue, OutputArguments, Exception, CallContext, Properties (§2.2.3.4).
       const elementCount =
         (hasComplexReturn ? 1 : 0) + (hasComplexArgs ? 1 : 0) + (hasException ? 1 : 0) + (ctxIsObject ? 1 : 0) + (ret.messageProperties !== undefined ? 1 : 0);
-      this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
-      this.w.writeInt32(callArrayId);
-      this.w.writeInt32(elementCount);
+      this.writeArraySingleObjectHeader(callArrayId, elementCount);
       if (hasComplexReturn && ret.returnValue !== undefined) this.writeAnyValue(ret.returnValue as NrbfValue);
       if (hasComplexArgs && ret.args !== undefined) this.writeAnyValue(ret.args);
       if (hasException) this.writeAnyValue(ret.exception!);
@@ -303,6 +299,12 @@ class Serializer {
     }
 
     return this.finalize();
+  }
+
+  private writeArraySingleObjectHeader(objectId: number, length: number): void {
+    this.w.writeByte(RecordTypeEnumeration.ArraySingleObject);
+    this.w.writeInt32(objectId);
+    this.w.writeInt32(length);
   }
 
   private writeStringValueWithCode(s: string): void {
