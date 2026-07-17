@@ -121,6 +121,34 @@ export interface NrbfMethodReturn {
 // Top-level return type of deserialize()
 export type NrbfRoot = NrbfValue | NrbfMethodCall | NrbfMethodReturn;
 
+// ---------------------------------------------------------------------------
+// Type guards
+// ---------------------------------------------------------------------------
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+export function isDateTime(v: unknown): v is DateTime {
+  return isPlainObject(v) && 'ticks' in v && 'kind' in v;
+}
+
+export function isNrbfObject(v: unknown): v is NrbfObject {
+  return isPlainObject(v) && 'typeName' in v && 'members' in v;
+}
+
+export function isNrbfArray(v: unknown): v is NrbfArray {
+  return isPlainObject(v) && 'arrayType' in v && 'elements' in v;
+}
+
+export function isNrbfMethodCall(v: unknown): v is NrbfMethodCall {
+  return isPlainObject(v) && v['kind'] === 'MethodCall';
+}
+
+export function isNrbfMethodReturn(v: unknown): v is NrbfMethodReturn {
+  return isPlainObject(v) && v['kind'] === 'MethodReturn';
+}
+
 // §2.2.2.1 — Value is absent when primitiveTypeEnum is Null
 export type ValueWithCode =
   | { primitiveTypeEnum: PrimitiveTypeEnumeration.Null }

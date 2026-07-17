@@ -6,8 +6,12 @@ import {
   RecordTypeEnumeration,
 } from './enums.js';
 import { BinaryWriter } from './writer.js';
+import {
+  isDateTime,
+  isNrbfArray,
+  isNrbfObject,
+} from './types.js';
 import type {
-  DateTime,
   MemberTypeEntry,
   NrbfArray,
   NrbfMethodCall,
@@ -21,22 +25,6 @@ import type {
 // ---------------------------------------------------------------------------
 // Type inference helpers
 // ---------------------------------------------------------------------------
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-function isDateTime(v: unknown): v is DateTime {
-  return isPlainObject(v) && 'ticks' in v && 'kind' in v;
-}
-
-function isNrbfObject(v: unknown): v is NrbfObject {
-  return isPlainObject(v) && 'typeName' in v && 'members' in v;
-}
-
-function isNrbfArray(v: unknown): v is NrbfArray {
-  return isPlainObject(v) && 'arrayType' in v && 'elements' in v;
-}
 
 function isComplexValue(v: NrbfValue): boolean {
   return Array.isArray(v) || isNrbfArray(v) || isNrbfObject(v);
