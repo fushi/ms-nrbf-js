@@ -246,7 +246,7 @@ describe('BinaryReader', () => {
     it('dispatches DateTime', () => {
       // kind=UTC(1) packed as 1n << 62n → ticks=0, kind=1
       const dt = reader(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40).readPrimitive(PrimitiveTypeEnumeration.DateTime);
-      expect(dt).toMatchObject({ ticks: 0n, kind: 1 });
+      expect(dt).toMatchObject({ kind: 1, ticks: 0n });
     });
 
     it('dispatches UInt16', () => {

@@ -93,25 +93,25 @@ describe('BinaryWriter', () => {
     });
 
     it('DateTime → packed 64-bit, kind=UTC(1)', () => {
-      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: 0n, kind: 1 });
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { kind: 1, ticks: 0n });
       expect(buf).toHaveLength(8);
       expect(buf.readBigUInt64LE(0)).toBe(1n << 62n);
     });
 
     it('DateTime → packed 64-bit, kind=Local(2)', () => {
       // kind=2 → 2n << 62n = 0x8000000000000000n
-      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: 0n, kind: 2 });
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { kind: 2, ticks: 0n });
       expect(buf.readBigUInt64LE(0)).toBe(2n << 62n);
     });
 
     it('DateTime → packed 64-bit, kind=Unspecified(0) with specific ticks', () => {
-      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: 123_456_789n, kind: 0 });
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { kind: 0, ticks: 123_456_789n });
       expect(buf.readBigUInt64LE(0)).toBe(123_456_789n);
     });
 
     it('DateTime → packed 64-bit, max ticks (62-bit) preserved', () => {
       const maxTicks = 0x3fffffffffffffffn;
-      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { ticks: maxTicks, kind: 0 });
+      const buf = writePrimitive(PrimitiveTypeEnumeration.DateTime, { kind: 0, ticks: maxTicks });
       expect(buf.readBigUInt64LE(0)).toBe(maxTicks);
     });
 

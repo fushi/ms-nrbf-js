@@ -136,8 +136,8 @@ export class BinaryReader {
   readDateTime(): DateTime {
     const raw = this.readUInt64();
     return {
-      ticks: raw & 0x3fffffffffffffffn,
       kind: Number(raw >> 62n),
+      ticks: raw & 0x3fffffffffffffffn,
     };
   }
 

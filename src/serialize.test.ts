@@ -16,8 +16,8 @@ function roundTrip(value: NrbfValue): NrbfValue {
 describe('serialize', () => {
   describe('circular references', () => {
     it('handles mutual object references via MemberReference', () => {
-      const nodeA: NrbfObject = { typeName: 'Node', libraryName: 'Lib', members: { value: 1, peer: null } };
-      const nodeB: NrbfObject = { typeName: 'Node', libraryName: 'Lib', members: { value: 2, peer: nodeA } };
+      const nodeA: NrbfObject = { libraryName: 'Lib', members: { peer: null, value: 1 }, typeName: 'Node' };
+      const nodeB: NrbfObject = { libraryName: 'Lib', members: { peer: nodeA, value: 2 }, typeName: 'Node' };
       nodeA.members['peer'] = nodeB;
 
       const result = deserialize(serialize(nodeA)) as NrbfObject;
@@ -29,7 +29,7 @@ describe('serialize', () => {
     });
 
     it('handles self-reference', () => {
-      const node: NrbfObject = { typeName: 'Node', members: { value: 42, self: null } };
+      const node: NrbfObject = { members: { self: null, value: 42 }, typeName: 'Node' };
       node.members['self'] = node;
 
       const result = deserialize(serialize(node)) as NrbfObject;
@@ -48,8 +48,8 @@ describe('serialize', () => {
     // A plain object that is not NrbfObject/NrbfArray/DateTime/array slips through
     // writeAnyValue's typeof==="object" gate and hits writeValue's defensive else.
     const root: NrbfObject = {
-      typeName: 'T',
       members: { x: {} as unknown as NrbfValue },
+      typeName: 'T',
     };
     expect(() => serialize(root)).toThrow(TypeError);
   });
@@ -60,13 +60,13 @@ describe('serialize', () => {
     // A sibling NrbfObject arg makes hasComplexArgs=true, routing all args through
     // writeAnyValue (the call-array path) rather than writeValueWithCode (inline path).
     const call: NrbfMethodCall = {
+      args: [
+        { members: {}, typeName: 'X' } as NrbfObject,
+        Symbol('x') as unknown as NrbfValue,
+      ],
       kind: 'MethodCall',
       methodName: 'M',
       typeName: 'T',
-      args: [
-        { typeName: 'X', members: {} } as NrbfObject,
-        Symbol('x') as unknown as NrbfValue,
-      ],
     };
     expect(() => serialize(call)).toThrow(/cannot infer primitive type/);
   });
@@ -77,10 +77,10 @@ describe('serialize', () => {
     // The "array" message branch is structurally unreachable: any real JS array sets
     // hasComplexArgs=true before inferValueWithCodeType is ever called.
     const call: NrbfMethodCall = {
+      args: [{} as unknown as NrbfValue],
       kind: 'MethodCall',
       methodName: 'M',
       typeName: 'T',
-      args: [{} as unknown as NrbfValue],
     };
     expect(() => serialize(call)).toThrow(/cannot encode object as ValueWithCode/);
   });
@@ -135,7 +135,7 @@ describe('serialize', () => {
 
   describe('SystemClassWithMembersAndTypes', () => {
     it('round-trips a class with primitive members', () => {
-      const obj: NrbfObject = { typeName: 'Point', members: { x: 10, y: 20 } };
+      const obj: NrbfObject = { members: { x: 10, y: 20 }, typeName: 'Point' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.typeName).toBe('Point');
       expect(result.members['x']).toBe(10);
@@ -143,32 +143,32 @@ describe('serialize', () => {
     });
 
     it('round-trips a class with a string member', () => {
-      const obj: NrbfObject = { typeName: 'Person', members: { name: 'Alice', age: 30 } };
+      const obj: NrbfObject = { members: { age: 30, name: 'Alice' }, typeName: 'Person' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.members['name']).toBe('Alice');
       expect(result.members['age']).toBe(30);
     });
 
     it('round-trips a class with a null member', () => {
-      const obj: NrbfObject = { typeName: 'Container', members: { value: null } };
+      const obj: NrbfObject = { members: { value: null }, typeName: 'Container' };
       expect((roundTrip(obj) as NrbfObject).members['value']).toBeNull();
     });
 
     it('round-trips a class with a Double member', () => {
-      const obj: NrbfObject = { typeName: 'Stats', members: { ratio: 3.14, count: 7 } };
+      const obj: NrbfObject = { members: { count: 7, ratio: 3.14 }, typeName: 'Stats' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.members['ratio']).toBeCloseTo(3.14);
       expect(result.members['count']).toBe(7);
     });
 
     it('round-trips a class with an array member', () => {
-      const obj: NrbfObject = { typeName: 'Wrapper', members: { items: [1, 2, 3] } };
+      const obj: NrbfObject = { members: { items: [1, 2, 3] }, typeName: 'Wrapper' };
       expect((roundTrip(obj) as NrbfObject).members['items']).toEqual([1, 2, 3]);
     });
 
     it('round-trips a class with a nested object member', () => {
-      const inner: NrbfObject = { typeName: 'Point', members: { x: 5, y: 6 } };
-      const outer: NrbfObject = { typeName: 'Line', members: { start: inner } };
+      const inner: NrbfObject = { members: { x: 5, y: 6 }, typeName: 'Point' };
+      const outer: NrbfObject = { members: { start: inner }, typeName: 'Line' };
       const result = roundTrip(outer) as NrbfObject;
       const start = result.members['start'] as NrbfObject;
       expect(start.typeName).toBe('Point');
@@ -179,9 +179,9 @@ describe('serialize', () => {
   describe('ClassWithMembersAndTypes (library class)', () => {
     it('round-trips a class with a libraryName', () => {
       const obj: NrbfObject = {
-        typeName: 'MyApp.Config',
         libraryName: 'MyApp, Version=1.0.0.0',
-        members: { timeout: 30, debug: false },
+        members: { debug: false, timeout: 30 },
+        typeName: 'MyApp.Config',
       };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.typeName).toBe('MyApp.Config');
@@ -193,16 +193,16 @@ describe('serialize', () => {
 
   describe('ClassWithId', () => {
     it('reuses class metadata for multiple instances of the same type', () => {
-      const p1: NrbfObject = { typeName: 'Point', members: { x: 1, y: 2 } };
-      const p2: NrbfObject = { typeName: 'Point', members: { x: 3, y: 4 } };
+      const p1: NrbfObject = { members: { x: 1, y: 2 }, typeName: 'Point' };
+      const p2: NrbfObject = { members: { x: 3, y: 4 }, typeName: 'Point' };
       const result = roundTrip([p1, p2]) as NrbfObject[];
       expect(result[0]!.members['x']).toBe(1);
       expect(result[1]!.members['x']).toBe(3);
     });
 
     it('emits ClassWithId byte for the second instance (not a fresh SystemClassWithMembersAndTypes)', () => {
-      const p1: NrbfObject = { typeName: 'Point', members: { x: 1, y: 2 } };
-      const p2: NrbfObject = { typeName: 'Point', members: { x: 3, y: 4 } };
+      const p1: NrbfObject = { members: { x: 1, y: 2 }, typeName: 'Point' };
+      const p2: NrbfObject = { members: { x: 3, y: 4 }, typeName: 'Point' };
       const buf = serialize([p1, p2]);
       // Layout: header(17) + BinaryArray(Single,SystemClass)(21) + SCWMT Point(31) = 69
       // BinaryArray: 1(type)+4(id)+1(arrayType)+4(rank)+4(len)+1(binaryType)+6(LPS"Point") = 21
@@ -213,7 +213,7 @@ describe('serialize', () => {
     });
 
     it('emits ClassWithId for every instance beyond the first (3 instances)', () => {
-      const make = (x: number): NrbfObject => ({ typeName: 'Point', members: { x, y: 0 } });
+      const make = (x: number): NrbfObject => ({ members: { x, y: 0 }, typeName: 'Point' });
       const buf = serialize([make(1), make(2), make(3)]);
       // ClassWithId(p2) at offset 69; ClassWithId(p3) = 69 + 1+4+4+4+4 = 69 + 17 = 86
       expect(buf[69]).toBe(RecordTypeEnumeration.ClassWithId);
@@ -222,7 +222,7 @@ describe('serialize', () => {
 
     it('each ClassWithId instance carries independent member values', () => {
       const points = [1, 2, 3, 4, 5].map(
-        (n): NrbfObject => ({ typeName: 'Point', members: { x: n, y: n * 10 } }),
+        (n): NrbfObject => ({ members: { x: n, y: n * 10 }, typeName: 'Point' }),
       );
       const result = roundTrip(points) as NrbfObject[];
       expect(result).toHaveLength(5);
@@ -233,7 +233,7 @@ describe('serialize', () => {
     });
 
     it('reuses metadata for library-class instances (ClassWithMembersAndTypes → ClassWithId)', () => {
-      const make = (n: number): NrbfObject => ({ typeName: 'Dto', libraryName: 'MyLib', members: { id: n } });
+      const make = (n: number): NrbfObject => ({ libraryName: 'MyLib', members: { id: n }, typeName: 'Dto' });
       const result = roundTrip([make(1), make(2), make(3)]) as NrbfObject[];
       for (let i = 0; i < 3; i++) {
         expect(result[i]!.typeName).toBe('Dto');
@@ -244,9 +244,9 @@ describe('serialize', () => {
 
     it('ClassWithId preserves memberTypes on round-trip', () => {
       const make = (n: number): NrbfObject => ({
+        memberTypes: { hi: PrimitiveTypeEnumeration.Int32, lo: PrimitiveTypeEnumeration.Byte },
+        members: { hi: n * 100, lo: n },
         typeName: 'Range',
-        memberTypes: { lo: PrimitiveTypeEnumeration.Byte, hi: PrimitiveTypeEnumeration.Int32 },
-        members: { lo: n, hi: n * 100 },
       });
       const result = roundTrip([make(1), make(2)]) as NrbfObject[];
       expect(result[0]!.memberTypes?.['lo']).toBe(PrimitiveTypeEnumeration.Byte);
@@ -258,8 +258,8 @@ describe('serialize', () => {
 
   describe('MemberReference (shared objects)', () => {
     it('writes a MemberReference when the same object appears twice', () => {
-      const shared: NrbfObject = { typeName: 'Tag', members: { label: 'hot' } };
-      const container: NrbfObject = { typeName: 'Container', members: { a: shared, b: shared } };
+      const shared: NrbfObject = { members: { label: 'hot' }, typeName: 'Tag' };
+      const container: NrbfObject = { members: { a: shared, b: shared }, typeName: 'Container' };
       const result = roundTrip(container) as NrbfObject;
       expect((result.members['a'] as NrbfObject).members['label']).toBe('hot');
       expect((result.members['b'] as NrbfObject).members['label']).toBe('hot');
@@ -268,7 +268,7 @@ describe('serialize', () => {
 
   describe('memberTypes type fidelity', () => {
     function typedObj(memberTypes: NrbfObject['memberTypes'], members: NrbfObject['members']): NrbfObject {
-      return { typeName: 'T', memberTypes, members };
+      return { memberTypes, members, typeName: 'T' };
     }
 
     it('round-trips Single without promoting to Double', () => {
@@ -339,7 +339,7 @@ describe('serialize', () => {
 
   describe('Char round-trip', () => {
     function charObj(c: string): NrbfObject {
-      return { typeName: 'T', memberTypes: { c: PrimitiveTypeEnumeration.Char }, members: { c } };
+      return { memberTypes: { c: PrimitiveTypeEnumeration.Char }, members: { c }, typeName: 'T' };
     }
 
     it('round-trips ASCII char preserving Char type', () => {
@@ -361,7 +361,7 @@ describe('serialize', () => {
     });
 
     it('without memberTypes hint, char is serialized as String (not Char)', () => {
-      const obj: NrbfObject = { typeName: 'T', members: { c: 'A' } };
+      const obj: NrbfObject = { members: { c: 'A' }, typeName: 'T' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.members['c']).toBe('A');
       // No Char hint → inferred as String
@@ -371,7 +371,7 @@ describe('serialize', () => {
 
   describe('Decimal round-trip', () => {
     function decObj(d: string): NrbfObject {
-      return { typeName: 'T', memberTypes: { d: PrimitiveTypeEnumeration.Decimal }, members: { d } };
+      return { memberTypes: { d: PrimitiveTypeEnumeration.Decimal }, members: { d }, typeName: 'T' };
     }
 
     it('round-trips a positive decimal', () => {
@@ -395,7 +395,7 @@ describe('serialize', () => {
 
   describe('TimeSpan round-trip', () => {
     function tsObj(ts: bigint): NrbfObject {
-      return { typeName: 'T', memberTypes: { ts: PrimitiveTypeEnumeration.TimeSpan }, members: { ts } };
+      return { memberTypes: { ts: PrimitiveTypeEnumeration.TimeSpan }, members: { ts }, typeName: 'T' };
     }
 
     it('round-trips 1 second (10_000_000 ticks)', () => {
@@ -417,7 +417,7 @@ describe('serialize', () => {
     });
 
     it('without memberTypes hint, bigint is inferred as Int64 (not TimeSpan)', () => {
-      const obj: NrbfObject = { typeName: 'T', members: { ts: 10_000_000n } };
+      const obj: NrbfObject = { members: { ts: 10_000_000n }, typeName: 'T' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.members['ts']).toBe(10_000_000n);
       expect(result.memberTypes?.['ts']).toBe(PrimitiveTypeEnumeration.Int64);
@@ -426,11 +426,11 @@ describe('serialize', () => {
 
   describe('DateTime round-trip', () => {
     function dtObj(dt: DateTime): NrbfObject {
-      return { typeName: 'T', members: { dt } };
+      return { members: { dt }, typeName: 'T' };
     }
 
     it('round-trips UTC DateTime (kind=1)', () => {
-      const result = roundTrip(dtObj({ ticks: 638_000_000_000_000_000n, kind: 1 })) as NrbfObject;
+      const result = roundTrip(dtObj({ kind: 1, ticks: 638_000_000_000_000_000n })) as NrbfObject;
       const dt = result.members['dt'] as DateTime;
       expect(dt.ticks).toBe(638_000_000_000_000_000n);
       expect(dt.kind).toBe(1);
@@ -438,14 +438,14 @@ describe('serialize', () => {
     });
 
     it('round-trips Local DateTime (kind=2)', () => {
-      const result = roundTrip(dtObj({ ticks: 0n, kind: 2 })) as NrbfObject;
+      const result = roundTrip(dtObj({ kind: 2, ticks: 0n })) as NrbfObject;
       const dt = result.members['dt'] as DateTime;
       expect(dt.ticks).toBe(0n);
       expect(dt.kind).toBe(2);
     });
 
     it('round-trips Unspecified DateTime (kind=0) with arbitrary ticks', () => {
-      const result = roundTrip(dtObj({ ticks: 123_456_789n, kind: 0 })) as NrbfObject;
+      const result = roundTrip(dtObj({ kind: 0, ticks: 123_456_789n })) as NrbfObject;
       const dt = result.members['dt'] as DateTime;
       expect(dt.ticks).toBe(123_456_789n);
       expect(dt.kind).toBe(0);
@@ -453,12 +453,12 @@ describe('serialize', () => {
 
     it('round-trips max ticks (62-bit all-ones)', () => {
       const maxTicks = 0x3fffffffffffffffn;
-      const result = roundTrip(dtObj({ ticks: maxTicks, kind: 0 })) as NrbfObject;
+      const result = roundTrip(dtObj({ kind: 0, ticks: maxTicks })) as NrbfObject;
       expect((result.members['dt'] as DateTime).ticks).toBe(maxTicks);
     });
 
     it('DateTime is auto-inferred without memberTypes hint', () => {
-      const obj: NrbfObject = { typeName: 'T', members: { dt: { ticks: 1n, kind: 1 } } };
+      const obj: NrbfObject = { members: { dt: { kind: 1, ticks: 1n } }, typeName: 'T' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.memberTypes?.['dt']).toBe(PrimitiveTypeEnumeration.DateTime);
     });
@@ -469,14 +469,14 @@ describe('serialize', () => {
       // Header(17) + BinaryLibrary("Lib")(9) + ClassWithMembersAndTypes header(30) = 56
       // ClassWithMembersAndTypes header: type(1)+objectId(4)+name(1+9)+memberCount(4)+memberName(1+5)+typeInfo(1)+libraryId(4)=30
       const obj: NrbfObject = {
-        typeName: 'Container',
         libraryName: 'Lib',
         members: {
           items: [
-            { typeName: 'Item', libraryName: 'Lib', members: { n: 1 } },
-            { typeName: 'Item', libraryName: 'Lib', members: { n: 2 } },
+            { libraryName: 'Lib', members: { n: 1 }, typeName: 'Item' },
+            { libraryName: 'Lib', members: { n: 2 }, typeName: 'Item' },
           ] as NrbfValue[],
         },
+        typeName: 'Container',
       };
       const buf = serialize(obj);
       expect(buf[56]).toBe(RecordTypeEnumeration.BinaryArray);
@@ -488,13 +488,13 @@ describe('serialize', () => {
       // Wait: no libraryId for SystemClass, so: 1+4+(1+12)+4+(1+5)+1 = 29 bytes
       // Total: 17 + 29 = 46
       const obj: NrbfObject = {
-        typeName: 'SysContainer',
         members: {
           items: [
-            { typeName: 'SysItem', members: { v: 1 } },
-            { typeName: 'SysItem', members: { v: 2 } },
+            { members: { v: 1 }, typeName: 'SysItem' },
+            { members: { v: 2 }, typeName: 'SysItem' },
           ] as NrbfValue[],
         },
+        typeName: 'SysContainer',
       };
       const buf = serialize(obj);
       // Header(17) + SystemClassWithMembersAndTypes: type(1)+objectId(4)+(1+12)+"SysContainer"+(4)+memberCount+(1+5)+"items"+typeInfo(1) = 46
@@ -503,14 +503,14 @@ describe('serialize', () => {
 
     it('falls back to ArraySingleObject for mixed class types', () => {
       const obj: NrbfObject = {
-        typeName: 'Container',
         libraryName: 'Lib',
         members: {
           items: [
-            { typeName: 'Foo', libraryName: 'Lib', members: {} },
-            { typeName: 'Bar', libraryName: 'Lib', members: {} },
+            { libraryName: 'Lib', members: {}, typeName: 'Foo' },
+            { libraryName: 'Lib', members: {}, typeName: 'Bar' },
           ] as NrbfValue[],
         },
+        typeName: 'Container',
       };
       const buf = serialize(obj);
       expect(buf[56]).toBe(RecordTypeEnumeration.ArraySingleObject);
@@ -518,14 +518,14 @@ describe('serialize', () => {
 
     it('falls back to ArraySingleObject when nulls are mixed in', () => {
       const obj: NrbfObject = {
-        typeName: 'Container',
         libraryName: 'Lib',
         members: {
           items: [
-            { typeName: 'Item', libraryName: 'Lib', members: {} },
+            { libraryName: 'Lib', members: {}, typeName: 'Item' },
             null,
           ] as NrbfValue[],
         },
+        typeName: 'Container',
       };
       const buf = serialize(obj);
       expect(buf[56]).toBe(RecordTypeEnumeration.ArraySingleObject);
@@ -533,14 +533,14 @@ describe('serialize', () => {
 
     it('round-trips library class array preserving element values', () => {
       const obj: NrbfObject = {
-        typeName: 'Container',
         libraryName: 'Lib',
         members: {
           items: [
-            { typeName: 'Item', libraryName: 'Lib', members: { n: 10 } },
-            { typeName: 'Item', libraryName: 'Lib', members: { n: 20 } },
+            { libraryName: 'Lib', members: { n: 10 }, typeName: 'Item' },
+            { libraryName: 'Lib', members: { n: 20 }, typeName: 'Item' },
           ] as NrbfValue[],
         },
+        typeName: 'Container',
       };
       const result = deserialize(serialize(obj)) as NrbfObject;
       const items = result.members['items'] as NrbfObject[];
@@ -553,13 +553,13 @@ describe('serialize', () => {
 
     it('round-trips system class array preserving element values', () => {
       const obj: NrbfObject = {
-        typeName: 'SysContainer',
         members: {
           items: [
-            { typeName: 'SysItem', members: { v: 42 } },
-            { typeName: 'SysItem', members: { v: 99 } },
+            { members: { v: 42 }, typeName: 'SysItem' },
+            { members: { v: 99 }, typeName: 'SysItem' },
           ] as NrbfValue[],
         },
+        typeName: 'SysContainer',
       };
       const result = deserialize(serialize(obj)) as NrbfObject;
       const items = result.members['items'] as NrbfObject[];
@@ -728,7 +728,7 @@ describe('serialize', () => {
 
   describe('string-array class member', () => {
     it('round-trips a class with a string array member', () => {
-      const obj: NrbfObject = { typeName: 'T', members: { tags: ['a', 'b', 'c'] } };
+      const obj: NrbfObject = { members: { tags: ['a', 'b', 'c'] }, typeName: 'T' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.members['tags']).toEqual(['a', 'b', 'c']);
     });
@@ -741,38 +741,38 @@ describe('serialize', () => {
 
     it('round-trips args containing an NrbfObject (ArgsIsArray path)', () => {
       const call: NrbfMethodCall = {
+        args: [{ members: { x: 1 }, typeName: 'Inner' }],
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: [{ typeName: 'Inner', members: { x: 1 } }],
       };
       const result = roundTripCall(call);
-      expect(result.args).toMatchObject([{ typeName: 'Inner', members: { x: 1 } }]);
+      expect(result.args).toMatchObject([{ members: { x: 1 }, typeName: 'Inner' }]);
     });
 
     it('round-trips mixed primitive and NrbfObject args', () => {
       const call: NrbfMethodCall = {
+        args: [42, 'text', { members: { value: true }, typeName: 'Payload' }],
         kind: 'MethodCall',
         methodName: 'Process',
         typeName: 'IService',
-        args: [42, 'text', { typeName: 'Payload', members: { value: true } }],
       };
       const result = roundTripCall(call);
       expect(result.methodName).toBe('Process');
       expect(result.args?.[0]).toBe(42);
       expect(result.args?.[1]).toBe('text');
-      expect(result.args?.[2]).toMatchObject({ typeName: 'Payload', members: { value: true } });
+      expect(result.args?.[2]).toMatchObject({ members: { value: true }, typeName: 'Payload' });
     });
 
     it('round-trips NrbfObject args with a library name', () => {
       const call: NrbfMethodCall = {
+        args: [{ libraryName: 'MyLib, Version=1.0.0.0', members: { id: 7 }, typeName: 'Msg' }],
         kind: 'MethodCall',
         methodName: 'Send',
         typeName: 'IService',
-        args: [{ typeName: 'Msg', libraryName: 'MyLib, Version=1.0.0.0', members: { id: 7 } }],
       };
       const result = roundTripCall(call);
-      expect(result.args).toMatchObject([{ typeName: 'Msg', libraryName: 'MyLib, Version=1.0.0.0', members: { id: 7 } }]);
+      expect(result.args).toMatchObject([{ libraryName: 'MyLib, Version=1.0.0.0', members: { id: 7 }, typeName: 'Msg' }]);
     });
 
     it('round-trips methodName and typeName', () => {
@@ -787,10 +787,10 @@ describe('serialize', () => {
 
     it('round-trips with string and int args', () => {
       const call: NrbfMethodCall = {
+        args: ['payload-data', 7],
         kind: 'MethodCall',
         methodName: 'PerformAction',
         typeName: 'IMyService, AdvancedDemo, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null',
-        args: ['payload-data', 7],
       };
       const result = roundTripCall(call);
       expect(result.methodName).toBe('PerformAction');
@@ -799,10 +799,10 @@ describe('serialize', () => {
 
     it('round-trips with callContext', () => {
       const call: NrbfMethodCall = {
+        callContext: 'ctx-value',
         kind: 'MethodCall',
         methodName: 'Ping',
         typeName: 'IService',
-        callContext: 'ctx-value',
       };
       const result = roundTripCall(call);
       expect(result.callContext).toBe('ctx-value');
@@ -810,35 +810,35 @@ describe('serialize', () => {
 
     it('round-trips NrbfObject callContext alone (ContextInArray path)', () => {
       const call: NrbfMethodCall = {
+        callContext: { libraryName: 'mscorlib', members: { id: 'call-42' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'call-42' } },
       };
       const result = roundTripCall(call);
-      expect(result.callContext).toMatchObject({ typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', members: { id: 'call-42' } });
+      expect(result.callContext).toMatchObject({ members: { id: 'call-42' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' });
     });
 
     it('round-trips NrbfObject args and NrbfObject callContext together', () => {
       const call: NrbfMethodCall = {
+        args: [{ members: { x: 1 }, typeName: 'Arg' }],
+        callContext: { libraryName: 'mscorlib', members: { id: 'ctx' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: [{ typeName: 'Arg', members: { x: 1 } }],
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'ctx' } },
       };
       const result = roundTripCall(call);
-      expect(result.args).toMatchObject([{ typeName: 'Arg', members: { x: 1 } }]);
-      expect(result.callContext).toMatchObject({ typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', members: { id: 'ctx' } });
+      expect(result.args).toMatchObject([{ members: { x: 1 }, typeName: 'Arg' }]);
+      expect(result.callContext).toMatchObject({ members: { id: 'ctx' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' });
     });
 
     it('round-trips with callContext and args', () => {
       const call: NrbfMethodCall = {
+        args: [true, 42n],
+        callContext: 'ctx',
         kind: 'MethodCall',
         methodName: 'Ping',
         typeName: 'IService',
-        callContext: 'ctx',
-        args: [true, 42n],
       };
       const result = roundTripCall(call);
       expect(result.callContext).toBe('ctx');
@@ -856,42 +856,42 @@ describe('serialize', () => {
     });
 
     it('round-trips genericTypeArguments without args (GenericMethod only)', () => {
-      const typeArg = { typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: 'System.Int32', UnityType: 9 } };
+      const typeArg = { libraryName: 'mscorlib', members: { Data: 'System.Int32', UnityType: 9 }, typeName: 'System.UnitySerializationHolder' };
       const call: NrbfMethodCall = {
+        genericTypeArguments: [typeArg],
         kind: 'MethodCall',
         methodName: 'M`1',
         typeName: 'IService',
-        genericTypeArguments: [typeArg],
       };
       const result = roundTripCall(call);
       expect(result.genericTypeArguments).toHaveLength(1);
-      expect(result.genericTypeArguments![0]).toMatchObject({ typeName: 'System.UnitySerializationHolder', members: { Data: 'System.Int32', UnityType: 9 } });
+      expect(result.genericTypeArguments![0]).toMatchObject({ members: { Data: 'System.Int32', UnityType: 9 }, typeName: 'System.UnitySerializationHolder' });
     });
 
     it('round-trips genericTypeArguments with complex args (ArgsIsArray + GenericMethod)', () => {
-      const typeArg = { typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: 'MyLib.Payload', UnityType: 4 } };
+      const typeArg = { libraryName: 'mscorlib', members: { Data: 'MyLib.Payload', UnityType: 4 }, typeName: 'System.UnitySerializationHolder' };
       const call: NrbfMethodCall = {
+        args: [{ libraryName: 'MyLib', members: { value: 99 }, typeName: 'Payload' }],
+        genericTypeArguments: [typeArg],
         kind: 'MethodCall',
         methodName: 'Send`1',
         typeName: 'IService',
-        args: [{ typeName: 'Payload', libraryName: 'MyLib', members: { value: 99 } }],
-        genericTypeArguments: [typeArg],
       };
       const result = roundTripCall(call);
-      expect(result.args).toMatchObject([{ typeName: 'Payload', members: { value: 99 } }]);
+      expect(result.args).toMatchObject([{ members: { value: 99 }, typeName: 'Payload' }]);
       expect(result.genericTypeArguments).toHaveLength(1);
       expect(result.genericTypeArguments![0]).toMatchObject({ members: { Data: 'MyLib.Payload' } });
     });
 
     it('round-trips genericTypeArguments with methodSignature (GenericMethod + MethodSignatureInArray)', () => {
-      const makeHolder = (data: string) => ({ typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: data, UnityType: 9 } });
+      const makeHolder = (data: string) => ({ libraryName: 'mscorlib', members: { Data: data, UnityType: 9 }, typeName: 'System.UnitySerializationHolder' });
       const call: NrbfMethodCall = {
+        args: [{ libraryName: 'Lib', members: { id: 7 }, typeName: 'Item' }],
+        genericTypeArguments: [makeHolder('System.String')],
         kind: 'MethodCall',
         methodName: 'Process`1',
-        typeName: 'IWorker',
-        args: [{ typeName: 'Item', libraryName: 'Lib', members: { id: 7 } }],
-        genericTypeArguments: [makeHolder('System.String')],
         methodSignature: [makeHolder('Lib.Item')],
+        typeName: 'IWorker',
       };
       const result = roundTripCall(call);
       expect(result.args).toMatchObject([{ members: { id: 7 } }]);
@@ -902,41 +902,41 @@ describe('serialize', () => {
     });
 
     it('round-trips methodSignature without args (MethodSignatureInArray only)', () => {
-      const sigEntry = { typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: 'System.String', UnityType: 9 } };
+      const sigEntry = { libraryName: 'mscorlib', members: { Data: 'System.String', UnityType: 9 }, typeName: 'System.UnitySerializationHolder' };
       const call: NrbfMethodCall = {
         kind: 'MethodCall',
         methodName: 'Greet',
-        typeName: 'IService',
         methodSignature: [sigEntry],
+        typeName: 'IService',
       };
       const result = roundTripCall(call);
       expect(result.methodSignature).toHaveLength(1);
-      expect(result.methodSignature![0]).toMatchObject({ typeName: 'System.UnitySerializationHolder', members: { Data: 'System.String', UnityType: 9 } });
+      expect(result.methodSignature![0]).toMatchObject({ members: { Data: 'System.String', UnityType: 9 }, typeName: 'System.UnitySerializationHolder' });
     });
 
     it('round-trips methodSignature with complex args (ArgsIsArray + MethodSignatureInArray)', () => {
-      const sigEntry = { typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: 'MyLib.Payload', UnityType: 4 } };
+      const sigEntry = { libraryName: 'mscorlib', members: { Data: 'MyLib.Payload', UnityType: 4 }, typeName: 'System.UnitySerializationHolder' };
       const call: NrbfMethodCall = {
+        args: [{ libraryName: 'MyLib', members: { value: 42 }, typeName: 'Payload' }],
         kind: 'MethodCall',
         methodName: 'Send',
-        typeName: 'IService',
-        args: [{ typeName: 'Payload', libraryName: 'MyLib', members: { value: 42 } }],
         methodSignature: [sigEntry],
+        typeName: 'IService',
       };
       const result = roundTripCall(call);
-      expect(result.args).toMatchObject([{ typeName: 'Payload', members: { value: 42 } }]);
+      expect(result.args).toMatchObject([{ members: { value: 42 }, typeName: 'Payload' }]);
       expect(result.methodSignature).toHaveLength(1);
-      expect(result.methodSignature![0]).toMatchObject({ typeName: 'System.UnitySerializationHolder', members: { Data: 'MyLib.Payload', UnityType: 4 } });
+      expect(result.methodSignature![0]).toMatchObject({ members: { Data: 'MyLib.Payload', UnityType: 4 }, typeName: 'System.UnitySerializationHolder' });
     });
 
     it('round-trips methodSignature with object callContext (MethodSignatureInArray + ContextInArray)', () => {
-      const sigEntry = { typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: 'System.Int32', UnityType: 9 } };
+      const sigEntry = { libraryName: 'mscorlib', members: { Data: 'System.Int32', UnityType: 9 }, typeName: 'System.UnitySerializationHolder' };
       const call: NrbfMethodCall = {
+        callContext: { libraryName: 'mscorlib', members: { id: 'ctx-99' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
         kind: 'MethodCall',
         methodName: 'M',
-        typeName: 'T',
         methodSignature: [sigEntry],
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'ctx-99' } },
+        typeName: 'T',
       };
       const result = roundTripCall(call);
       expect(result.methodSignature).toHaveLength(1);
@@ -945,18 +945,18 @@ describe('serialize', () => {
     });
 
     it('round-trips methodSignature with complex args, object callContext, and messageProperties', () => {
-      const makeSig = (data: string) => ({ typeName: 'System.UnitySerializationHolder', libraryName: 'mscorlib', members: { Data: data, UnityType: 9 } });
+      const makeSig = (data: string) => ({ libraryName: 'mscorlib', members: { Data: data, UnityType: 9 }, typeName: 'System.UnitySerializationHolder' });
       const call: NrbfMethodCall = {
-        kind: 'MethodCall',
-        methodName: 'Process',
-        typeName: 'IWorker',
         args: [
-          { typeName: 'Item', libraryName: 'Lib', members: { id: 1 } },
-          { typeName: 'Options', libraryName: 'Lib', members: { flag: true } },
+          { libraryName: 'Lib', members: { id: 1 }, typeName: 'Item' },
+          { libraryName: 'Lib', members: { flag: true }, typeName: 'Options' },
         ],
+        callContext: { libraryName: 'mscorlib', members: { traceId: 'abc' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
+        kind: 'MethodCall',
+        messageProperties: [{ libraryName: 'Lib', members: { key: 'val' }, typeName: 'Prop' }],
+        methodName: 'Process',
         methodSignature: [makeSig('Lib.Item'), makeSig('Lib.Options')],
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { traceId: 'abc' } },
-        messageProperties: [{ typeName: 'Prop', libraryName: 'Lib', members: { key: 'val' } }],
+        typeName: 'IWorker',
       };
       const result = roundTripCall(call);
       expect(result.args).toMatchObject([{ members: { id: 1 } }, { members: { flag: true } }]);
@@ -971,10 +971,10 @@ describe('serialize', () => {
       // null is a valid inline arg — inferValueWithCodeType(null) returns PrimitiveTypeEnumeration.Null.
       // hasComplexArgs=false for [null], so ArgsInline path is taken.
       const call: NrbfMethodCall = {
+        args: [null],
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: [null],
       };
       const result = roundTripCall(call);
       expect(result.args).toEqual([null]);
@@ -1022,14 +1022,14 @@ describe('serialize', () => {
     });
 
     it('round-trips with args', () => {
-      const ret: NrbfMethodReturn = { kind: 'MethodReturn', returnValue: 'done', args: [1, 'extra'] };
+      const ret: NrbfMethodReturn = { args: [1, 'extra'], kind: 'MethodReturn', returnValue: 'done' };
       const result = roundTripReturn(ret);
       expect(result.returnValue).toBe('done');
       expect(result.args).toEqual([1, 'extra']);
     });
 
     it('round-trips with callContext', () => {
-      const ret: NrbfMethodReturn = { kind: 'MethodReturn', returnValue: 1, callContext: 'ctx' };
+      const ret: NrbfMethodReturn = { callContext: 'ctx', kind: 'MethodReturn', returnValue: 1 };
       const result = roundTripReturn(ret);
       expect(result.returnValue).toBe(1);
       expect(result.callContext).toBe('ctx');
@@ -1037,21 +1037,21 @@ describe('serialize', () => {
 
     it('round-trips NrbfObject callContext alone (ContextInArray path)', () => {
       const ret: NrbfMethodReturn = {
+        callContext: { libraryName: 'mscorlib', members: { id: 'r-42' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
         kind: 'MethodReturn',
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'r-42' } },
       };
       const result = roundTripReturn(ret);
-      expect(result.callContext).toMatchObject({ typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', members: { id: 'r-42' } });
+      expect(result.callContext).toMatchObject({ members: { id: 'r-42' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' });
     });
 
     it('round-trips complex return value and NrbfObject callContext together', () => {
       const ret: NrbfMethodReturn = {
+        callContext: { libraryName: 'mscorlib', members: { id: 'r-ctx' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
         kind: 'MethodReturn',
-        returnValue: { typeName: 'Result', members: { code: 0 } },
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'r-ctx' } },
+        returnValue: { members: { code: 0 }, typeName: 'Result' },
       };
       const result = roundTripReturn(ret);
-      expect(result.returnValue).toMatchObject({ typeName: 'Result', members: { code: 0 } });
+      expect(result.returnValue).toMatchObject({ members: { code: 0 }, typeName: 'Result' });
       expect(result.callContext).toMatchObject({ members: { id: 'r-ctx' } });
     });
 
@@ -1067,108 +1067,108 @@ describe('serialize', () => {
     it('round-trips NrbfObject return value (ReturnValueInArray path)', () => {
       const ret: NrbfMethodReturn = {
         kind: 'MethodReturn',
-        returnValue: { typeName: 'Result', members: { code: 0, message: 'ok' } },
+        returnValue: { members: { code: 0, message: 'ok' }, typeName: 'Result' },
       };
       const result = roundTripReturn(ret);
-      expect(result.returnValue).toMatchObject({ typeName: 'Result', members: { code: 0, message: 'ok' } });
+      expect(result.returnValue).toMatchObject({ members: { code: 0, message: 'ok' }, typeName: 'Result' });
     });
 
     it('round-trips NrbfObject return value with a library name', () => {
       const ret: NrbfMethodReturn = {
         kind: 'MethodReturn',
-        returnValue: { typeName: 'Resp', libraryName: 'Svc, Version=2.0.0.0', members: { status: 200 } },
+        returnValue: { libraryName: 'Svc, Version=2.0.0.0', members: { status: 200 }, typeName: 'Resp' },
       };
       const result = roundTripReturn(ret);
-      expect(result.returnValue).toMatchObject({ typeName: 'Resp', libraryName: 'Svc, Version=2.0.0.0', members: { status: 200 } });
+      expect(result.returnValue).toMatchObject({ libraryName: 'Svc, Version=2.0.0.0', members: { status: 200 }, typeName: 'Resp' });
     });
 
     it('round-trips complex args in MethodReturn (ArgsInArray path)', () => {
       const ret: NrbfMethodReturn = {
+        args: [{ members: { val: 99 }, typeName: 'OutParam' }],
         kind: 'MethodReturn',
         returnValue: 'done',
-        args: [{ typeName: 'OutParam', members: { val: 99 } }],
       };
       const result = roundTripReturn(ret);
       expect(result.returnValue).toBe('done');
-      expect(result.args).toMatchObject([{ typeName: 'OutParam', members: { val: 99 } }]);
+      expect(result.args).toMatchObject([{ members: { val: 99 }, typeName: 'OutParam' }]);
     });
 
     it('round-trips complex return value and complex args together', () => {
       const ret: NrbfMethodReturn = {
+        args: [{ members: { n: 2 }, typeName: 'A' }],
         kind: 'MethodReturn',
-        returnValue: { typeName: 'R', members: { n: 1 } },
-        args: [{ typeName: 'A', members: { n: 2 } }],
+        returnValue: { members: { n: 1 }, typeName: 'R' },
       };
       const result = roundTripReturn(ret);
-      expect(result.returnValue).toMatchObject({ typeName: 'R', members: { n: 1 } });
-      expect(result.args).toMatchObject([{ typeName: 'A', members: { n: 2 } }]);
+      expect(result.returnValue).toMatchObject({ members: { n: 1 }, typeName: 'R' });
+      expect(result.args).toMatchObject([{ members: { n: 2 }, typeName: 'A' }]);
     });
 
     it('round-trips exception alone (ExceptionInArray path)', () => {
       const ret: NrbfMethodReturn = {
+        exception: { libraryName: 'mscorlib', members: { _message: 'boom' }, typeName: 'System.Exception' },
         kind: 'MethodReturn',
-        exception: { typeName: 'System.Exception', libraryName: 'mscorlib', members: { _message: 'boom' } },
       };
       const result = roundTripReturn(ret);
-      expect(result.exception).toMatchObject({ typeName: 'System.Exception', members: { _message: 'boom' } });
+      expect(result.exception).toMatchObject({ members: { _message: 'boom' }, typeName: 'System.Exception' });
       expect(result.returnValue).toBeUndefined();
       expect(result.args).toBeUndefined();
     });
 
     it('round-trips exception with NrbfObject callContext', () => {
       const ret: NrbfMethodReturn = {
+        callContext: { libraryName: 'mscorlib', members: { id: 'ex-ctx' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
+        exception: { libraryName: 'mscorlib', members: { _message: 'invalid' }, typeName: 'System.InvalidOperationException' },
         kind: 'MethodReturn',
-        exception: { typeName: 'System.InvalidOperationException', libraryName: 'mscorlib', members: { _message: 'invalid' } },
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'ex-ctx' } },
       };
       const result = roundTripReturn(ret);
-      expect(result.exception).toMatchObject({ typeName: 'System.InvalidOperationException', members: { _message: 'invalid' } });
+      expect(result.exception).toMatchObject({ members: { _message: 'invalid' }, typeName: 'System.InvalidOperationException' });
       expect(result.callContext).toMatchObject({ members: { id: 'ex-ctx' } });
     });
 
     it('round-trips exception with string callContext', () => {
       const ret: NrbfMethodReturn = {
-        kind: 'MethodReturn',
-        exception: { typeName: 'System.Exception', libraryName: 'mscorlib', members: { _message: 'oops' } },
         callContext: 'call-123',
+        exception: { libraryName: 'mscorlib', members: { _message: 'oops' }, typeName: 'System.Exception' },
+        kind: 'MethodReturn',
       };
       const result = roundTripReturn(ret);
-      expect(result.exception).toMatchObject({ typeName: 'System.Exception', members: { _message: 'oops' } });
+      expect(result.exception).toMatchObject({ members: { _message: 'oops' }, typeName: 'System.Exception' });
       expect(result.callContext).toBe('call-123');
     });
 
     it('round-trips messageProperties alone (PropertiesInArray path)', () => {
-      const entry: NrbfObject = { typeName: 'DictionaryEntry', members: { _key: 'priority', _value: 1 } };
+      const entry: NrbfObject = { members: { _key: 'priority', _value: 1 }, typeName: 'DictionaryEntry' };
       const ret: NrbfMethodReturn = { kind: 'MethodReturn', messageProperties: [entry] };
       const result = roundTripReturn(ret);
-      expect(result.messageProperties).toMatchObject([{ typeName: 'DictionaryEntry', members: { _key: 'priority', _value: 1 } }]);
+      expect(result.messageProperties).toMatchObject([{ members: { _key: 'priority', _value: 1 }, typeName: 'DictionaryEntry' }]);
       expect(result.returnValue).toBeUndefined();
     });
 
     it('round-trips messageProperties alongside return value and callContext', () => {
-      const entry: NrbfObject = { typeName: 'DictionaryEntry', members: { _key: 'trace', _value: 'abc' } };
+      const entry: NrbfObject = { members: { _key: 'trace', _value: 'abc' }, typeName: 'DictionaryEntry' };
       const ret: NrbfMethodReturn = {
-        kind: 'MethodReturn',
-        returnValue: 42,
         callContext: 'ctx-1',
+        kind: 'MethodReturn',
         messageProperties: [entry],
+        returnValue: 42,
       };
       const result = roundTripReturn(ret);
       expect(result.returnValue).toBe(42);
       expect(result.callContext).toBe('ctx-1');
-      expect(result.messageProperties).toMatchObject([{ typeName: 'DictionaryEntry', members: { _key: 'trace', _value: 'abc' } }]);
+      expect(result.messageProperties).toMatchObject([{ members: { _key: 'trace', _value: 'abc' }, typeName: 'DictionaryEntry' }]);
     });
 
     it('round-trips messageProperties alongside exception (PropertiesInArray + ExceptionInArray)', () => {
-      const entry: NrbfObject = { typeName: 'DictionaryEntry', members: { _key: 'reqId', _value: 'x99' } };
+      const entry: NrbfObject = { members: { _key: 'reqId', _value: 'x99' }, typeName: 'DictionaryEntry' };
       const ret: NrbfMethodReturn = {
+        exception: { libraryName: 'mscorlib', members: { _message: 'fail' }, typeName: 'System.Exception' },
         kind: 'MethodReturn',
-        exception: { typeName: 'System.Exception', libraryName: 'mscorlib', members: { _message: 'fail' } },
         messageProperties: [entry],
       };
       const result = roundTripReturn(ret);
-      expect(result.exception).toMatchObject({ typeName: 'System.Exception', members: { _message: 'fail' } });
-      expect(result.messageProperties).toMatchObject([{ typeName: 'DictionaryEntry', members: { _key: 'reqId', _value: 'x99' } }]);
+      expect(result.exception).toMatchObject({ members: { _message: 'fail' }, typeName: 'System.Exception' });
+      expect(result.messageProperties).toMatchObject([{ members: { _key: 'reqId', _value: 'x99' }, typeName: 'DictionaryEntry' }]);
     });
   });
 
@@ -1176,8 +1176,8 @@ describe('serialize', () => {
     it('preserves Single return value without precision loss', () => {
       const ret: NrbfMethodReturn = {
         kind: 'MethodReturn',
-        returnValue: 1.5,
         returnType: PrimitiveTypeEnumeration.Single,
+        returnValue: 1.5,
       };
       const buf = serialize(ret);
       const result = deserialize(buf) as NrbfMethodReturn;
@@ -1190,11 +1190,11 @@ describe('serialize', () => {
 
     it('preserves UInt32 arg that exceeds Int32 range', () => {
       const call: NrbfMethodCall = {
+        argTypes: [PrimitiveTypeEnumeration.UInt32],
+        args: [4_000_000_000],
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: [4_000_000_000],
-        argTypes: [PrimitiveTypeEnumeration.UInt32],
       };
       const buf = serialize(call);
       const result = deserialize(buf) as NrbfMethodCall;
@@ -1205,11 +1205,11 @@ describe('serialize', () => {
 
     it('preserves Char arg (distinct from String)', () => {
       const call: NrbfMethodCall = {
+        argTypes: [PrimitiveTypeEnumeration.Char],
+        args: ['A'],
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: ['A'],
-        argTypes: [PrimitiveTypeEnumeration.Char],
       };
       const buf = serialize(call);
       const result = deserialize(buf) as NrbfMethodCall;
@@ -1220,9 +1220,9 @@ describe('serialize', () => {
 
     it('preserves UInt64 output arg in MethodReturn', () => {
       const ret: NrbfMethodReturn = {
-        kind: 'MethodReturn',
-        args: [18_446_744_073_709_551_615n],
         argTypes: [PrimitiveTypeEnumeration.UInt64],
+        args: [18_446_744_073_709_551_615n],
+        kind: 'MethodReturn',
       };
       const buf = serialize(ret);
       const result = deserialize(buf) as NrbfMethodReturn;
@@ -1234,11 +1234,11 @@ describe('serialize', () => {
     it('deserializer populates argTypes from ArgsInline stream', () => {
       // Build a stream with Single + UInt32 args using known argTypes.
       const call: NrbfMethodCall = {
+        argTypes: [PrimitiveTypeEnumeration.Single, PrimitiveTypeEnumeration.UInt32],
+        args: [3.14, 3_000_000_000],
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: [3.14, 3_000_000_000],
-        argTypes: [PrimitiveTypeEnumeration.Single, PrimitiveTypeEnumeration.UInt32],
       };
       const result = deserialize(serialize(call)) as NrbfMethodCall;
       expect(result.argTypes).toEqual([PrimitiveTypeEnumeration.Single, PrimitiveTypeEnumeration.UInt32]);
@@ -1247,8 +1247,8 @@ describe('serialize', () => {
     it('deserializer populates returnType from ReturnValueInline stream', () => {
       const ret: NrbfMethodReturn = {
         kind: 'MethodReturn',
-        returnValue: 2.5,
         returnType: PrimitiveTypeEnumeration.Single,
+        returnValue: 2.5,
       };
       const result = deserialize(serialize(ret)) as NrbfMethodReturn;
       expect(result.returnType).toBe(PrimitiveTypeEnumeration.Single);
@@ -1258,13 +1258,13 @@ describe('serialize', () => {
     it('preserves Single alongside an object arg in ArgsIsArray path', () => {
       // Without the fix, inferPrimitiveType(1.5) returns Double, so the Single would round-trip
       // as Double. With the fix, argTypes[1]=Single is threaded through writeAnyValue.
-      const obj: NrbfObject = { typeName: 'Foo', members: { x: 1 } };
+      const obj: NrbfObject = { members: { x: 1 }, typeName: 'Foo' };
       const call: NrbfMethodCall = {
+        argTypes: [undefined, PrimitiveTypeEnumeration.Single],
+        args: [obj, 1.5],
         kind: 'MethodCall',
         methodName: 'M',
         typeName: 'T',
-        args: [obj, 1.5],
-        argTypes: [undefined, PrimitiveTypeEnumeration.Single],
       };
       const result = deserialize(serialize(call)) as NrbfMethodCall;
       expect(result.args![1]).toBeCloseTo(1.5);
@@ -1274,13 +1274,13 @@ describe('serialize', () => {
     it('preserves Char alongside an object arg in ArgsIsArray path', () => {
       // Char is a string in JS — without the fix it would be written as BinaryObjectString,
       // and the type hint would be lost entirely.
-      const obj: NrbfObject = { typeName: 'Bar', members: { n: 42 } };
+      const obj: NrbfObject = { members: { n: 42 }, typeName: 'Bar' };
       const call: NrbfMethodCall = {
+        argTypes: [undefined, PrimitiveTypeEnumeration.Char],
+        args: [obj, 'A'],
         kind: 'MethodCall',
         methodName: 'Send',
         typeName: 'ISvc',
-        args: [obj, 'A'],
-        argTypes: [undefined, PrimitiveTypeEnumeration.Char],
       };
       const result = deserialize(serialize(call)) as NrbfMethodCall;
       expect(result.args![1]).toBe('A');
@@ -1289,13 +1289,13 @@ describe('serialize', () => {
 
     it('deserializer populates argTypes from ArgsIsArray stream', () => {
       // Serialise with explicit type hints, deserialise and verify argTypes is populated.
-      const obj: NrbfObject = { typeName: 'Payload', members: { id: 0 } };
+      const obj: NrbfObject = { members: { id: 0 }, typeName: 'Payload' };
       const call: NrbfMethodCall = {
+        argTypes: [undefined, PrimitiveTypeEnumeration.UInt32, PrimitiveTypeEnumeration.Single],
+        args: [obj, 4_000_000_000, 3.14],
         kind: 'MethodCall',
         methodName: 'Process',
         typeName: 'IWorker',
-        args: [obj, 4_000_000_000, 3.14],
-        argTypes: [undefined, PrimitiveTypeEnumeration.UInt32, PrimitiveTypeEnumeration.Single],
       };
       const result = deserialize(serialize(call)) as NrbfMethodCall;
       expect(result.argTypes![0]).toBeUndefined();
@@ -1312,44 +1312,44 @@ describe('serialize', () => {
     }
 
     it('round-trips messageProperties alone (no args, no context)', () => {
-      const entry: NrbfObject = { typeName: 'DictionaryEntry', members: { _key: 'env', _value: 'prod' } };
+      const entry: NrbfObject = { members: { _key: 'env', _value: 'prod' }, typeName: 'DictionaryEntry' };
       const call: NrbfMethodCall = {
         kind: 'MethodCall',
+        messageProperties: [entry],
         methodName: 'Ping',
         typeName: 'IService',
-        messageProperties: [entry],
       };
       const result = roundTripCall(call);
-      expect(result.messageProperties).toMatchObject([{ typeName: 'DictionaryEntry', members: { _key: 'env', _value: 'prod' } }]);
+      expect(result.messageProperties).toMatchObject([{ members: { _key: 'env', _value: 'prod' }, typeName: 'DictionaryEntry' }]);
       expect(result.args).toBeUndefined();
     });
 
     it('round-trips messageProperties with complex args (ArgsIsArray + PropertiesInArray)', () => {
-      const entry: NrbfObject = { typeName: 'DictionaryEntry', members: { _key: 'k', _value: 'v' } };
+      const entry: NrbfObject = { members: { _key: 'k', _value: 'v' }, typeName: 'DictionaryEntry' };
       const call: NrbfMethodCall = {
+        args: [{ members: { id: 7 }, typeName: 'Payload' }],
         kind: 'MethodCall',
+        messageProperties: [entry],
         methodName: 'Send',
         typeName: 'IService',
-        args: [{ typeName: 'Payload', members: { id: 7 } }],
-        messageProperties: [entry],
       };
       const result = roundTripCall(call);
-      expect(result.args).toMatchObject([{ typeName: 'Payload', members: { id: 7 } }]);
-      expect(result.messageProperties).toMatchObject([{ typeName: 'DictionaryEntry', members: { _key: 'k', _value: 'v' } }]);
+      expect(result.args).toMatchObject([{ members: { id: 7 }, typeName: 'Payload' }]);
+      expect(result.messageProperties).toMatchObject([{ members: { _key: 'k', _value: 'v' }, typeName: 'DictionaryEntry' }]);
     });
 
     it('round-trips messageProperties with NrbfObject callContext (ContextInArray + PropertiesInArray)', () => {
-      const entry: NrbfObject = { typeName: 'DictionaryEntry', members: { _key: 'tid', _value: 't1' } };
+      const entry: NrbfObject = { members: { _key: 'tid', _value: 't1' }, typeName: 'DictionaryEntry' };
       const call: NrbfMethodCall = {
+        callContext: { libraryName: 'mscorlib', members: { id: 'ctx' }, typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext' },
         kind: 'MethodCall',
+        messageProperties: [entry],
         methodName: 'M',
         typeName: 'T',
-        callContext: { typeName: 'System.Runtime.Remoting.Messaging.LogicalCallContext', libraryName: 'mscorlib', members: { id: 'ctx' } },
-        messageProperties: [entry],
       };
       const result = roundTripCall(call);
       expect(result.callContext).toMatchObject({ members: { id: 'ctx' } });
-      expect(result.messageProperties).toMatchObject([{ typeName: 'DictionaryEntry', members: { _key: 'tid', _value: 't1' } }]);
+      expect(result.messageProperties).toMatchObject([{ members: { _key: 'tid', _value: 't1' }, typeName: 'DictionaryEntry' }]);
     });
   });
 
@@ -1361,10 +1361,10 @@ describe('serialize', () => {
     it('round-trips a Rectangular 2×3 Int32 array', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [2, 3],
         elementBinaryType: BinaryTypeEnumeration.Primitive,
         elementPrimitiveType: PrimitiveTypeEnumeration.Int32,
         elements: [1, 2, 3, 4, 5, 6],
+        lengths: [2, 3],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
@@ -1378,9 +1378,9 @@ describe('serialize', () => {
     it('round-trips a Rectangular 3×2 String array', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [3, 2],
         elementBinaryType: BinaryTypeEnumeration.String,
         elements: ['a', 'b', 'c', 'd', 'e', 'f'],
+        lengths: [3, 2],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
@@ -1391,9 +1391,9 @@ describe('serialize', () => {
     it('round-trips a Rectangular array with null elements', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [2, 2],
         elementBinaryType: BinaryTypeEnumeration.Object,
         elements: ['hello', null, null, 'world'],
+        lengths: [2, 2],
       };
       const result = roundTripArr(arr);
       expect(result.elements).toEqual(['hello', null, null, 'world']);
@@ -1402,9 +1402,9 @@ describe('serialize', () => {
     it('round-trips a Jagged array', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Jagged,
-        lengths: [3],
         elementBinaryType: BinaryTypeEnumeration.ObjectArray,
         elements: [[1, 2], [3, 4, 5], [6]],
+        lengths: [3],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Jagged);
@@ -1415,10 +1415,10 @@ describe('serialize', () => {
     it('round-trips a SingleOffset array with lower bound', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.SingleOffset,
-        lengths: [3],
-        lowerBounds: [5],
         elementBinaryType: BinaryTypeEnumeration.String,
         elements: ['a', 'b', 'c'],
+        lengths: [3],
+        lowerBounds: [5],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.SingleOffset);
@@ -1430,11 +1430,11 @@ describe('serialize', () => {
     it('round-trips a RectangularOffset array with lower bounds', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.RectangularOffset,
-        lengths: [2, 2],
-        lowerBounds: [1, 1],
         elementBinaryType: BinaryTypeEnumeration.Primitive,
         elementPrimitiveType: PrimitiveTypeEnumeration.Int32,
         elements: [10, 20, 30, 40],
+        lengths: [2, 2],
+        lowerBounds: [1, 1],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.RectangularOffset);
@@ -1446,10 +1446,10 @@ describe('serialize', () => {
     it('round-trips a JaggedOffset array with lower bound', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.JaggedOffset,
-        lengths: [2],
-        lowerBounds: [10],
         elementBinaryType: BinaryTypeEnumeration.ObjectArray,
         elements: [[1, 2, 3], [4, 5]],
+        lengths: [2],
+        lowerBounds: [10],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.JaggedOffset);
@@ -1461,12 +1461,12 @@ describe('serialize', () => {
     it('round-trips an NrbfArray as a class member', () => {
       const matrix: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [2, 2],
         elementBinaryType: BinaryTypeEnumeration.Primitive,
         elementPrimitiveType: PrimitiveTypeEnumeration.Double,
         elements: [1.0, 2.0, 3.0, 4.0],
+        lengths: [2, 2],
       };
-      const obj: NrbfObject = { typeName: 'Grid', members: { data: matrix } };
+      const obj: NrbfObject = { members: { data: matrix }, typeName: 'Grid' };
       const result = deserialize(serialize(obj)) as NrbfObject;
       const data = result.members['data'] as NrbfArray;
       expect(data.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
@@ -1477,10 +1477,10 @@ describe('serialize', () => {
     it('emits correct BinaryArray record header for Rectangular', () => {
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [2, 3],
         elementBinaryType: BinaryTypeEnumeration.Primitive,
         elementPrimitiveType: PrimitiveTypeEnumeration.Int32,
         elements: [1, 2, 3, 4, 5, 6],
+        lengths: [2, 3],
       };
       const buf = serialize(arr);
       const idx = buf.indexOf(RecordTypeEnumeration.BinaryArray);
@@ -1496,13 +1496,13 @@ describe('serialize', () => {
       // Covers serialize.ts lines 614–616: SystemClass branch writes elementClassName LPS.
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [2, 1],
         elementBinaryType: BinaryTypeEnumeration.SystemClass,
         elementClassName: 'System.Exception',
         elements: [
-          { typeName: 'System.Exception', members: { _message: 'oops' } } as NrbfObject,
+          { members: { _message: 'oops' }, typeName: 'System.Exception' } as NrbfObject,
           null,
         ],
+        lengths: [2, 1],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
@@ -1518,14 +1518,14 @@ describe('serialize', () => {
       const lib = 'MyAssembly, Version=1.0.0.0';
       const arr: NrbfArray = {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
-        lengths: [2, 1],
         elementBinaryType: BinaryTypeEnumeration.Class,
         elementClassName: 'MyNamespace.MyClass',
         elementLibraryName: lib,
         elements: [
-          { typeName: 'MyNamespace.MyClass', libraryName: lib, members: { value: 1 } } as NrbfObject,
+          { libraryName: lib, members: { value: 1 }, typeName: 'MyNamespace.MyClass' } as NrbfObject,
           null,
         ],
+        lengths: [2, 1],
       };
       const result = roundTripArr(arr);
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);
@@ -1551,7 +1551,7 @@ describe('serialize', () => {
 
   describe('DateTime in mixed JS array (ArraySingleObject path)', () => {
     it('round-trips a DateTime element alongside a string in an ArraySingleObject', () => {
-      const dt: DateTime = { ticks: 637_000_000_000_000_000n, kind: 1 };
+      const dt: DateTime = { kind: 1, ticks: 637_000_000_000_000_000n };
       const result = roundTrip([dt, 'hello']) as NrbfValue[];
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual(dt);
@@ -1559,7 +1559,7 @@ describe('serialize', () => {
     });
 
     it('round-trips a DateTime element alongside null', () => {
-      const dt: DateTime = { ticks: 0n, kind: 0 };
+      const dt: DateTime = { kind: 0, ticks: 0n };
       const result = roundTrip([dt, null]) as NrbfValue[];
       expect(result[0]).toEqual(dt);
       expect(result[1]).toBeNull();
@@ -1569,7 +1569,7 @@ describe('serialize', () => {
   describe('defensive ?? fallbacks', () => {
     it('round-trips a class with no members (empty writeMemberTypeInfo — line 502 branch)', () => {
       // writeMemberTypeInfo is called with an empty entries array; the for-loop bodies are never entered.
-      const obj: NrbfObject = { typeName: 'Empty', members: {} };
+      const obj: NrbfObject = { members: {}, typeName: 'Empty' };
       const result = roundTrip(obj) as NrbfObject;
       expect(result.typeName).toBe('Empty');
       expect(result.members).toEqual({});
@@ -1578,9 +1578,9 @@ describe('serialize', () => {
     it('ClassWithId fills missing member with null (line 540 ?? null branch)', () => {
       // obj2 shares a type key with obj1 but omits "label".
       // The ClassWithId write loop hits obj2.members["label"] === undefined → ?? null → ObjectNull.
-      const obj1: NrbfObject = { typeName: 'T', members: { x: 1, label: 'hello' } };
-      const obj2: NrbfObject = { typeName: 'T', members: { x: 2 } };
-      const root: NrbfObject = { typeName: 'Root', members: { a: obj1, b: obj2 } };
+      const obj1: NrbfObject = { members: { label: 'hello', x: 1 }, typeName: 'T' };
+      const obj2: NrbfObject = { members: { x: 2 }, typeName: 'T' };
+      const root: NrbfObject = { members: { a: obj1, b: obj2 }, typeName: 'Root' };
       const result = deserialize(serialize(root)) as NrbfObject;
       const b = result.members['b'] as NrbfObject;
       expect(b.members['x']).toBe(2);
@@ -1595,8 +1595,8 @@ describe('serialize', () => {
         arrayType: BinaryArrayTypeEnumeration.Rectangular,
         elementBinaryType: BinaryTypeEnumeration.Class,
         elementClassName: 'SomeType',
-        lengths: [0, 0],
         elements: [],
+        lengths: [0, 0],
       };
       const result = deserialize(serialize(arr)) as NrbfArray;
       expect(result.arrayType).toBe(BinaryArrayTypeEnumeration.Rectangular);

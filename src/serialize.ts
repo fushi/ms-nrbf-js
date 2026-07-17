@@ -497,7 +497,7 @@ class Serializer {
 
     if (isNrbfObject(value)) {
       if (value.libraryName) {
-        return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName: value.typeName, libraryId: this.libraryIds.get(value.libraryName)! } };
+        return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { libraryId: this.libraryIds.get(value.libraryName)!, typeName: value.typeName } };
       }
       return { binaryType: BinaryTypeEnumeration.SystemClass, className: value.typeName };
     }
@@ -579,7 +579,7 @@ class Serializer {
       return undefined;
     }
     if (libraryName) {
-      return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { typeName, libraryId: this.libraryIds.get(libraryName)! } };
+      return { binaryType: BinaryTypeEnumeration.Class, classTypeInfo: { libraryId: this.libraryIds.get(libraryName)!, typeName } };
     }
     return { binaryType: BinaryTypeEnumeration.SystemClass, className: typeName };
   }
@@ -591,7 +591,7 @@ class Serializer {
     if (bt === BinaryTypeEnumeration.SystemClass)
       return { binaryType: bt, className: arr.elementClassName! };
     if (bt === BinaryTypeEnumeration.Class)
-      return { binaryType: bt, classTypeInfo: { typeName: arr.elementClassName!, libraryId: this.libraryIds.get(arr.elementLibraryName!) ?? 0 } };
+      return { binaryType: bt, classTypeInfo: { libraryId: this.libraryIds.get(arr.elementLibraryName!) ?? 0, typeName: arr.elementClassName! } };
     return { binaryType: bt } as MemberTypeEntry;
   }
 

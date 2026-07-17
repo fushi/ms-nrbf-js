@@ -37,8 +37,11 @@ function readAdditionalInfo(r: BinaryReader, binaryType: BinaryTypeEnumeration):
       return { binaryType, primitiveType: r.readByte() as PrimitiveTypeEnumeration };
     case BinaryTypeEnumeration.SystemClass:
       return { binaryType, className: r.readLengthPrefixedString() };
-    case BinaryTypeEnumeration.Class:
-      return { binaryType, classTypeInfo: { typeName: r.readLengthPrefixedString(), libraryId: r.readInt32() } };
+    case BinaryTypeEnumeration.Class: {
+      const typeName = r.readLengthPrefixedString();
+      const libraryId = r.readInt32();
+      return { binaryType, classTypeInfo: { libraryId, typeName } };
+    }
     default:
       return { binaryType } as MemberTypeEntry;
   }
@@ -174,7 +177,7 @@ class Deserializer {
       const idRef = this.r.readInt32();
       const existing = this.objects.get(idRef);
       if (existing !== undefined) return [existing, undefined];
-      this.fixups.push({ set: onForwardRef, idRef });
+      this.fixups.push({ idRef, set: onForwardRef });
       return [null, undefined];
     }
     if (tag === RecordTypeEnumeration.MemberPrimitiveTyped) {
@@ -194,7 +197,7 @@ class Deserializer {
     const memberCount = this.r.readInt32();
     const memberNames: string[] = [];
     for (let i = 0; i < memberCount; i++) memberNames.push(this.r.readLengthPrefixedString());
-    return { objectId, name, memberNames };
+    return { memberNames, name, objectId };
   }
 
   private readMemberTypeInfo(count: number): MemberTypeInfo {
@@ -293,7 +296,7 @@ class Deserializer {
     memberTypeInfo: MemberTypeInfo | undefined,
     libraryId: number | undefined,
   ): NrbfObject {
-    const obj: NrbfObject = { typeName: classInfo.name, members: {} };
+    const obj: NrbfObject = { members: {}, typeName: classInfo.name };
     if (libraryId !== undefined) obj.libraryName = this.resolveLibraryName(libraryId);
     if (memberTypeInfo !== undefined) {
       const memberTypes = this.extractMemberTypes(classInfo, memberTypeInfo);
@@ -310,12 +313,12 @@ class Deserializer {
   // Array records
   // -------------------------------------------------------------------------
 
-  private initArray(): { objectId: number; length: number; arr: NrbfValue[] } {
+  private initArray(): { arr: NrbfValue[]; length: number; objectId: number } {
     const objectId = this.r.readInt32();
     const length = this.r.readInt32();
     const arr: NrbfValue[] = [];
     this.objects.set(objectId, arr);
-    return { objectId, length, arr };
+    return { arr, length, objectId };
   }
 
   private readArraySinglePrimitive(): NrbfValue[] {
@@ -405,7 +408,7 @@ class Deserializer {
         const existing = this.objects.get(idRef);
         const idx = arr.length;
         arr.push(existing ?? null);
-        if (existing === undefined) this.fixups.push({ set: (v) => { arr[idx] = v; }, idRef });
+        if (existing === undefined) this.fixups.push({ idRef, set: (v) => { arr[idx] = v; } });
         remaining--;
       } else {
         arr.push(this.readRecord(tag));
