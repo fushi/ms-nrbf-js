@@ -61,6 +61,12 @@ describe('deserialize', () => {
     expect(() => deserialize(stream)).toThrow(/Unresolved forward reference/);
   });
 
+  it('accepts a Uint8Array (non-Buffer) input', () => {
+    const stream = buf(header(1), [0x06, ...i32(1), ...lps('hello')], END);
+    const u8 = new Uint8Array(stream.buffer, stream.byteOffset, stream.byteLength);
+    expect(deserialize(u8)).toBe('hello');
+  });
+
   describe('BinaryObjectString as root', () => {
     it('deserializes a string value', () => {
       const stream = buf(header(1), [0x06, ...i32(1), ...lps('hello')], END);

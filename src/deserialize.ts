@@ -614,6 +614,7 @@ class Deserializer {
   }
 }
 
-export function deserialize(buf: Buffer): NrbfRoot {
-  return new Deserializer(buf).run();
+export function deserialize(buf: Buffer | Uint8Array): NrbfRoot {
+  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+  return new Deserializer(b).run();
 }
