@@ -1,5 +1,5 @@
-import { PrimitiveTypeEnumeration } from "./enums.js";
-import { DateTime, PrimitiveValue } from "./types.js";
+import { PrimitiveTypeEnumeration } from './enums.js';
+import { DateTime, PrimitiveValue } from './types.js';
 
 export class BinaryReader {
   private offset = 0;
@@ -110,7 +110,7 @@ export class BinaryReader {
       if ((byte & 0x80) === 0) break;
       shift += 7;
     }
-    return this.readBytes(length).toString("utf8");
+    return this.readBytes(length).toString('utf8');
   }
 
   // §2.1.1.1 — UTF-8 encoded Unicode character; first byte determines total byte count.
@@ -129,7 +129,7 @@ export class BinaryReader {
     const bytes = Buffer.alloc(1 + extra);
     bytes[0] = first;
     for (let i = 1; i <= extra; i++) bytes[i] = this.readByte();
-    return bytes.toString("utf8");
+    return bytes.toString('utf8');
   }
 
   // §2.1.1.5 — 64-bit little-endian: low 62 bits are ticks, high 2 bits are Kind.

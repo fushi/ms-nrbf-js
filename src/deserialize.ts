@@ -4,8 +4,8 @@ import {
   MessageFlags,
   PrimitiveTypeEnumeration,
   RecordTypeEnumeration,
-} from "./enums.js";
-import { BinaryReader } from "./reader.js";
+} from './enums.js';
+import { BinaryReader } from './reader.js';
 import {
   ClassInfo,
   MemberTypeEntry,
@@ -16,7 +16,7 @@ import {
   NrbfObject,
   NrbfRoot,
   NrbfValue,
-} from "./types.js";
+} from './types.js';
 
 interface ClassMeta {
   classInfo: ClassInfo;
@@ -435,7 +435,7 @@ class Deserializer {
     const methodName = this.readStringValueWithCode();
     const typeName = this.readStringValueWithCode();
 
-    const result: NrbfMethodCall = { kind: "MethodCall", methodName, typeName };
+    const result: NrbfMethodCall = { kind: 'MethodCall', methodName, typeName };
     this.readInlineArgsAndContext(messageEnum, result);
     if (!(messageEnum & MessageFlags.ArgsInline) && (
       (messageEnum & MessageFlags.ArgsIsArray) ||
@@ -452,7 +452,7 @@ class Deserializer {
 
   private readBinaryMethodReturn(): NrbfMethodReturn {
     const messageEnum = this.r.readInt32();
-    const result: NrbfMethodReturn = { kind: "MethodReturn" };
+    const result: NrbfMethodReturn = { kind: 'MethodReturn' };
     if (messageEnum & MessageFlags.ReturnValueInline) {
       const [value, type] = this.readValueWithCodeAndType();
       result.returnValue = value;
@@ -506,7 +506,7 @@ class Deserializer {
 
     const { length, arr } = this.initArray();
 
-    if (result.kind === "MethodCall") {
+    if (result.kind === 'MethodCall') {
       if (messageEnum & MessageFlags.ArgsIsArray) {
         // With ArgsIsArray, each arg is a direct element. Order per §2.2.3.2:
         // args (direct), GenericMethod, MethodSignature, CallContext, MessageProperties.
@@ -528,18 +528,18 @@ class Deserializer {
         }
         result.args = argSlice;
         if (hasArgType) result.argTypes = argTypeSlice;
-        this.readOptionalArrayValue(messageEnum, MessageFlags.GenericMethod, arr, (v) => { result.genericTypeArguments = v; }, "genericTypeArguments");
-        this.readOptionalArrayValue(messageEnum, MessageFlags.MethodSignatureInArray, arr, (v) => { result.methodSignature = v; }, "methodSignature");
+        this.readOptionalArrayValue(messageEnum, MessageFlags.GenericMethod, arr, (v) => { result.genericTypeArguments = v; }, 'genericTypeArguments');
+        this.readOptionalArrayValue(messageEnum, MessageFlags.MethodSignatureInArray, arr, (v) => { result.methodSignature = v; }, 'methodSignature');
         this.readOptionalCallContext(messageEnum, arr, result);
-        this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, "messageProperties");
+        this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, 'messageProperties');
       } else {
         // ArgsInArray: element 0 is the nested args sub-array. Otherwise: no arg flags set.
         // Order per §2.2.3.2: ArgsInArray, GenericMethod, MethodSignature, CallContext, MessageProperties.
         if (messageEnum & MessageFlags.ArgsInArray) this.readArgsInArray(arr, result);
-        this.readOptionalArrayValue(messageEnum, MessageFlags.GenericMethod, arr, (v) => { result.genericTypeArguments = v; }, "genericTypeArguments");
-        this.readOptionalArrayValue(messageEnum, MessageFlags.MethodSignatureInArray, arr, (v) => { result.methodSignature = v; }, "methodSignature");
+        this.readOptionalArrayValue(messageEnum, MessageFlags.GenericMethod, arr, (v) => { result.genericTypeArguments = v; }, 'genericTypeArguments');
+        this.readOptionalArrayValue(messageEnum, MessageFlags.MethodSignatureInArray, arr, (v) => { result.methodSignature = v; }, 'methodSignature');
         this.readOptionalCallContext(messageEnum, arr, result);
-        this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, "messageProperties");
+        this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, 'messageProperties');
         this.drainCallArray(arr, length);
       }
     } else {
@@ -552,7 +552,7 @@ class Deserializer {
         this.readScalarIntoArray(arr, (v) => { result.exception = v as NrbfObject; });
       }
       this.readOptionalCallContext(messageEnum, arr, result);
-      this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, "messageProperties");
+      this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, 'messageProperties');
       this.drainCallArray(arr, length);
     }
   }

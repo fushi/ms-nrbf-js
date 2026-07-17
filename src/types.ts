@@ -1,4 +1,4 @@
-import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration } from "./enums.js";
+import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration } from './enums.js';
 
 // §2.1.1.5 — 2-bit Kind field packed into the high bits of the DateTime INT64
 export enum DateTimeKind {
@@ -91,7 +91,7 @@ export interface ArrayInfo {
 
 // Method invocation stream roots (not values — only appear as the stream root)
 export interface NrbfMethodCall {
-  kind: "MethodCall";
+  kind: 'MethodCall';
   methodName: string;
   typeName: string;
   callContext?: string | NrbfObject;
@@ -106,7 +106,7 @@ export interface NrbfMethodCall {
 }
 
 export interface NrbfMethodReturn {
-  kind: "MethodReturn";
+  kind: 'MethodReturn';
   returnValue?: NrbfValue;
   // Primitive type for an inline (ReturnValueInline) return value. Same purpose as argTypes.
   returnType?: PrimitiveTypeEnumeration;

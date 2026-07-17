@@ -1,5 +1,5 @@
-import { PrimitiveTypeEnumeration } from "./enums.js";
-import type { DateTime, PrimitiveValue } from "./types.js";
+import { PrimitiveTypeEnumeration } from './enums.js';
+import type { DateTime, PrimitiveValue } from './types.js';
 
 export class BinaryWriter {
   private readonly chunks: Buffer[] = [];
@@ -56,7 +56,7 @@ export class BinaryWriter {
 
   // §2.1.1.6 — variable-length length prefix (1–5 bytes), then UTF-8 string body
   writeLengthPrefixedString(s: string): void {
-    const body = Buffer.from(s, "utf8");
+    const body = Buffer.from(s, 'utf8');
     let len = body.length;
     const prefix: number[] = [];
     do {
@@ -72,7 +72,7 @@ export class BinaryWriter {
 
   // §2.1.1.1 — UTF-8 encode a single Unicode character (1–4 bytes, no length prefix)
   writeChar(s: string): void {
-    this.chunks.push(Buffer.from(s, "utf8"));
+    this.chunks.push(Buffer.from(s, 'utf8'));
   }
 
   // §2.1.1.5 — pack 62-bit ticks + 2-bit Kind into a little-endian UINT64

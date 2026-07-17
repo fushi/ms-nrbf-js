@@ -1,9 +1,9 @@
-export { deserialize } from "./deserialize.js";
-export { serialize } from "./serialize.js";
+export { deserialize } from './deserialize.js';
+export { serialize } from './serialize.js';
 
-export { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration } from "./enums.js";
+export { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration } from './enums.js';
 
-export { DateTimeKind } from "./types.js";
+export { DateTimeKind } from './types.js';
 export type {
   DateTime,
   PrimitiveValue,
@@ -13,4 +13,4 @@ export type {
   NrbfMethodCall,
   NrbfMethodReturn,
   NrbfRoot,
-} from "./types.js";
+} from './types.js';

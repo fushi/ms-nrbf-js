@@ -3,7 +3,7 @@ import {
   MessageFlags,
   PrimitiveTypeEnumeration,
   RecordTypeEnumeration,
-} from "./enums.js";
+} from './enums.js';
 import {
   ArrayInfo,
   ArrayOfValueWithCode,
@@ -13,7 +13,7 @@ import {
   PrimitiveValue,
   StringValueWithCode,
   ValueWithCode,
-} from "./types.js";
+} from './types.js';
 
 // §2.6.1 — MUST be first record in every serialization stream
 export interface SerializationHeaderRecord {

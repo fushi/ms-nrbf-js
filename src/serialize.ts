@@ -4,8 +4,8 @@ import {
   MessageFlags,
   PrimitiveTypeEnumeration,
   RecordTypeEnumeration,
-} from "./enums.js";
-import { BinaryWriter } from "./writer.js";
+} from './enums.js';
+import { BinaryWriter } from './writer.js';
 import type {
   DateTime,
   MemberTypeEntry,
@@ -16,26 +16,26 @@ import type {
   NrbfRoot,
   NrbfValue,
   PrimitiveValue,
-} from "./types.js";
+} from './types.js';
 
 // ---------------------------------------------------------------------------
 // Type inference helpers
 // ---------------------------------------------------------------------------
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 function isDateTime(v: unknown): v is DateTime {
-  return isPlainObject(v) && "ticks" in v && "kind" in v;
+  return isPlainObject(v) && 'ticks' in v && 'kind' in v;
 }
 
 function isNrbfObject(v: unknown): v is NrbfObject {
-  return isPlainObject(v) && "typeName" in v && "members" in v;
+  return isPlainObject(v) && 'typeName' in v && 'members' in v;
 }
 
 function isNrbfArray(v: unknown): v is NrbfArray {
-  return isPlainObject(v) && "arrayType" in v && "elements" in v;
+  return isPlainObject(v) && 'arrayType' in v && 'elements' in v;
 }
 
 function isComplexValue(v: NrbfValue): boolean {
@@ -46,10 +46,10 @@ function isComplexValue(v: NrbfValue): boolean {
 // Returns undefined when the value is a string, object, or array.
 function inferPrimitiveType(v: NrbfValue): PrimitiveTypeEnumeration | undefined {
   if (v === null) return PrimitiveTypeEnumeration.Null;
-  if (typeof v === "boolean") return PrimitiveTypeEnumeration.Boolean;
-  if (typeof v === "bigint") return PrimitiveTypeEnumeration.Int64;
+  if (typeof v === 'boolean') return PrimitiveTypeEnumeration.Boolean;
+  if (typeof v === 'bigint') return PrimitiveTypeEnumeration.Int64;
   if (isDateTime(v)) return PrimitiveTypeEnumeration.DateTime;
-  if (typeof v === "number") {
+  if (typeof v === 'number') {
     return Number.isInteger(v) && v >= -2_147_483_648 && v <= 2_147_483_647
       ? PrimitiveTypeEnumeration.Int32
       : PrimitiveTypeEnumeration.Double;
@@ -60,11 +60,11 @@ function inferPrimitiveType(v: NrbfValue): PrimitiveTypeEnumeration | undefined 
 // Infer the PrimitiveTypeEnumeration for a ValueWithCode field — includes String, unlike inferPrimitiveType.
 function inferValueWithCodeType(v: NrbfValue): PrimitiveTypeEnumeration {
   if (v === null) return PrimitiveTypeEnumeration.Null;
-  if (typeof v === "string") return PrimitiveTypeEnumeration.String;
+  if (typeof v === 'string') return PrimitiveTypeEnumeration.String;
   const pt = inferPrimitiveType(v);
   if (pt !== undefined) return pt;
   throw new TypeError(
-    `serialize: cannot encode object as ValueWithCode — only primitives and strings are supported`,
+    'serialize: cannot encode object as ValueWithCode — only primitives and strings are supported',
   );
 }
 
@@ -114,21 +114,21 @@ class Serializer {
   private readonly libraryIds = new Map<string, number>();
 
   run(root: NrbfRoot): Buffer {
-    if (typeof root === "object" && root !== null && !Array.isArray(root) && !isDateTime(root)) {
-      if ((root as NrbfMethodCall).kind === "MethodCall") return this.runMethodCall(root as NrbfMethodCall);
-      if ((root as NrbfMethodReturn).kind === "MethodReturn") return this.runMethodReturn(root as NrbfMethodReturn);
+    if (typeof root === 'object' && root !== null && !Array.isArray(root) && !isDateTime(root)) {
+      if ((root as NrbfMethodCall).kind === 'MethodCall') return this.runMethodCall(root as NrbfMethodCall);
+      if ((root as NrbfMethodReturn).kind === 'MethodReturn') return this.runMethodReturn(root as NrbfMethodReturn);
     }
 
     const value = root as NrbfValue;
     if (
       value === null ||
-      typeof value === "boolean" ||
-      typeof value === "number" ||
-      typeof value === "bigint" ||
+      typeof value === 'boolean' ||
+      typeof value === 'number' ||
+      typeof value === 'bigint' ||
       isDateTime(value)
     ) {
       throw new TypeError(
-        "serialize: root value must be a string, NrbfObject, NrbfMethodCall, NrbfMethodReturn, or array — bare primitives have no objectId",
+        'serialize: root value must be a string, NrbfObject, NrbfMethodCall, NrbfMethodReturn, or array — bare primitives have no objectId',
       );
     }
 
@@ -271,7 +271,7 @@ class Serializer {
         : hasComplexArgs ? MessageFlags.ArgsInArray : MessageFlags.ArgsInline;
       flags |= ret.returnValue === undefined ? MessageFlags.ReturnValueVoid
         : ret.returnValue === null ? MessageFlags.NoReturnValue
-        : hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline;
+          : hasComplexReturn ? MessageFlags.ReturnValueInArray : MessageFlags.ReturnValueInline;
     }
     flags |= ret.callContext !== undefined
       ? ctxIsObject ? MessageFlags.ContextInArray : MessageFlags.ContextInline
@@ -324,7 +324,7 @@ class Serializer {
   }
 
   private collectLibraries(value: NrbfValue, seen: Set<object>): void {
-    if (value === null || typeof value !== "object") return;
+    if (value === null || typeof value !== 'object') return;
     if (seen.has(value)) return;
     seen.add(value);
 
@@ -345,7 +345,7 @@ class Serializer {
 
   // Write `value` using the pre-assigned `objectId` as its identity.
   private writeValue(value: NrbfValue, objectId: number): void {
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       this.w.writeByte(RecordTypeEnumeration.BinaryObjectString);
       this.w.writeInt32(objectId);
       this.w.writeLengthPrefixedString(value);
@@ -406,7 +406,7 @@ class Serializer {
       this.w.writePrimitive(typeHint, value as PrimitiveValue);
       return;
     }
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       this.w.writeByte(RecordTypeEnumeration.BinaryObjectString);
       this.w.writeInt32(this.nextId++);
       this.w.writeLengthPrefixedString(value);
@@ -418,7 +418,7 @@ class Serializer {
       this.w.writePrimitive(PrimitiveTypeEnumeration.DateTime, value);
       return;
     }
-    if (typeof value === "object") {
+    if (typeof value === 'object') {
       const existingId = this.objectIds.get(value);
       if (existingId !== undefined) {
         this.w.writeByte(RecordTypeEnumeration.MemberReference);
@@ -484,12 +484,12 @@ class Serializer {
     if (primType !== undefined && primType !== PrimitiveTypeEnumeration.Null) {
       return { binaryType: BinaryTypeEnumeration.Primitive, primitiveType: primType };
     }
-    if (typeof value === "string") return { binaryType: BinaryTypeEnumeration.String };
+    if (typeof value === 'string') return { binaryType: BinaryTypeEnumeration.String };
 
     if (Array.isArray(value)) {
       const pt = uniformPrimitiveType(value);
       if (pt !== undefined) return { binaryType: BinaryTypeEnumeration.PrimitiveArray, primitiveType: pt };
-      if (value.every((el) => typeof el === "string" || el === null)) {
+      if (value.every((el) => typeof el === 'string' || el === null)) {
         return { binaryType: BinaryTypeEnumeration.StringArray };
       }
       return { binaryType: BinaryTypeEnumeration.ObjectArray };
@@ -631,7 +631,7 @@ class Serializer {
       return;
     }
 
-    if (arr.every((el) => typeof el === "string" || el === null)) {
+    if (arr.every((el) => typeof el === 'string' || el === null)) {
       this.w.writeByte(RecordTypeEnumeration.ArraySingleString);
       this.w.writeInt32(objectId);
       this.w.writeInt32(arr.length);
