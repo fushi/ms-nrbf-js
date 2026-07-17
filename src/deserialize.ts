@@ -161,15 +161,7 @@ class Deserializer {
   // -------------------------------------------------------------------------
 
   private readReferenceableValue(onForwardRef: (v: NrbfValue) => void): NrbfValue {
-    const tag = this.r.readByte() as RecordTypeEnumeration;
-    if (tag === RecordTypeEnumeration.MemberReference) {
-      const idRef = this.r.readInt32();
-      const existing = this.objects.get(idRef);
-      if (existing !== undefined) return existing;
-      this.fixups.push({ set: onForwardRef, idRef });
-      return null; // placeholder — overwritten when fixup is applied
-    }
-    return this.readRecord(tag);
+    return this.readReferenceableValueWithType(onForwardRef)[0];
   }
 
   // Like readReferenceableValue but also returns the PrimitiveTypeEnumeration when the record is
