@@ -79,12 +79,13 @@ const buf = serialize(obj);
 |---|---|
 | `null` | `null` |
 | `Boolean` | `boolean` |
-| `Byte`, `Int16`, `Int32`, `SByte`, `UInt16`, `Single`, `Double` | `number` |
+| `Byte`, `Int16`, `Int32`, `SByte`, `UInt16`, `UInt32`, `Single`, `Double` | `number` |
 | `Int64`, `UInt64`, `TimeSpan` | `bigint` |
 | `Char`, `Decimal`, `String` | `string` |
 | `DateTime` | `DateTime` (`{ ticks: bigint; kind: DateTimeKind }`) |
 | Class / object | `NrbfObject` |
-| Array | `NrbfValue[]` |
+| Single-dimensional array | `NrbfValue[]` |
+| Multi-dimensional / jagged / offset array | `NrbfArray` |
 
 ### `NrbfObject`
 
@@ -109,6 +110,23 @@ const obj: NrbfObject = {
 };
 ```
 
+### `NrbfArray`
+
+Multi-dimensional, jagged, and lower-bounded arrays are represented as `NrbfArray`. Elements are stored flat in row-major order.
+
+```ts
+interface NrbfArray {
+  arrayType: BinaryArrayTypeEnumeration;  // Rectangular, Jagged, *Offset, …
+  lengths: number[];                      // per-dimension length
+  lowerBounds?: number[];                 // present for *Offset variants
+  elementBinaryType: BinaryTypeEnumeration;
+  elementPrimitiveType?: PrimitiveTypeEnumeration;
+  elementClassName?: string;
+  elementLibraryName?: string;
+  elements: NrbfValue[];
+}
+```
+
 ### `NrbfMethodCall` / `NrbfMethodReturn`
 
 ```ts
@@ -116,21 +134,21 @@ interface NrbfMethodCall {
   kind: "MethodCall";
   methodName: string;
   typeName: string;
-  callContext?: string;
+  callContext?: string | NrbfObject;
   args?: NrbfValue[];
 }
 
 interface NrbfMethodReturn {
   kind: "MethodReturn";
   returnValue?: NrbfValue;
-  callContext?: string;
+  exception?: NrbfObject;
+  callContext?: string | NrbfObject;
   args?: NrbfValue[];
 }
 ```
 
 ## Known limitations
 
-- **Multi-dimensional arrays** (`BinaryArray` with rank > 1) are deserialized as flat `NrbfValue[]` in row-major order. Shape metadata is not preserved.
 - **CJS** — this package is ESM-only (`"type": "module"`).
 
 ## License
