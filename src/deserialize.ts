@@ -51,7 +51,6 @@ class Deserializer {
   private readonly r: BinaryReader;
   private readonly objects = new Map<number, NrbfValue>();
   private readonly classesByObjectId = new Map<number, ClassMeta>();
-  private readonly classesByName = new Map<string, ClassMeta>();
   private readonly libraries = new Map<number, string>();
   private readonly fixups: Fixup[] = [];
 
@@ -255,9 +254,8 @@ class Deserializer {
     return any ? result : undefined;
   }
 
-  private storeClassMeta(meta: ClassMeta, nameKey: string): void {
+  private storeClassMeta(meta: ClassMeta): void {
     this.classesByObjectId.set(meta.classInfo.objectId, meta);
-    this.classesByName.set(nameKey, meta);
   }
 
   private resolveLibraryName(libraryId: number): string {
@@ -275,8 +273,7 @@ class Deserializer {
     const classInfo = this.readClassInfo();
     const memberTypeInfo = hasTypes ? this.readMemberTypeInfo(classInfo.memberNames.length) : undefined;
     const libraryId = isSystem ? undefined : this.r.readInt32();
-    const nameKey = isSystem ? classInfo.name : `${classInfo.name}@${libraryId}`;
-    this.storeClassMeta({ classInfo, ...(memberTypeInfo !== undefined && { memberTypeInfo }), ...(libraryId !== undefined && { libraryId }) }, nameKey);
+    this.storeClassMeta({ classInfo, ...(memberTypeInfo !== undefined && { memberTypeInfo }), ...(libraryId !== undefined && { libraryId }) });
 
     return this.buildNrbfObject(classInfo.objectId, classInfo, memberTypeInfo, libraryId);
   }
