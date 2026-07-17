@@ -3,8 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { deserialize } from './deserialize.js';
-import { PrimitiveTypeEnumeration } from './enums.js';
-import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration as PTE } from './enums.js';
+import { BinaryArrayTypeEnumeration, BinaryTypeEnumeration, PrimitiveTypeEnumeration } from './enums.js';
 import type { NrbfArray, NrbfMethodCall, NrbfMethodReturn, NrbfObject } from './types.js';
 
 const fixturesDir = join(fileURLToPath(import.meta.url), '..', '__fixtures__');
@@ -568,7 +567,7 @@ describe('deserialize', () => {
 
     it('deserializes mixed-type args and populates argTypes', () => {
       // messageEnum: ArgsIsArray (0x04) | NoContext (0x10) = 0x14
-      // arg[0]: BinaryObjectString → type=undefined; arg[1]: MemberPrimitiveTyped Int32 → type=PTE.Int32
+      // arg[0]: BinaryObjectString → type=undefined; arg[1]: MemberPrimitiveTyped Int32 → type=PrimitiveTypeEnumeration.Int32
       const stream = buf(
         header(1),
         [0x15, ...i32(0x14), ...svwc('DoWork'), ...svwc('IWorker')],
@@ -582,7 +581,7 @@ describe('deserialize', () => {
       expect(result.methodName).toBe('DoWork');
       expect(result.typeName).toBe('IWorker');
       expect(result.args).toEqual(['payload', 42]);
-      expect(result.argTypes).toEqual([undefined, PTE.Int32]);
+      expect(result.argTypes).toEqual([undefined, PrimitiveTypeEnumeration.Int32]);
     });
 
     it('handles ObjectNull arg — argTypes not set when no typed args present', () => {
@@ -612,7 +611,7 @@ describe('deserialize', () => {
       );
       const result = deserialize(stream) as NrbfMethodCall;
       expect(result.args).toEqual([7]);
-      expect(result.argTypes).toEqual([PTE.Int32]);
+      expect(result.argTypes).toEqual([PrimitiveTypeEnumeration.Int32]);
       expect(result.callContext).toBe('my-context');
     });
 
@@ -1255,7 +1254,7 @@ describe('deserialize', () => {
       expect(matrix.arrayType).toBe(BinaryArrayTypeEnumeration.RectangularOffset);
       expect(matrix.elements).toEqual([11, 12, 13, 21, 22, 23]);
       expect(matrix.elementBinaryType).toBe(BinaryTypeEnumeration.Primitive);
-      expect(matrix.elementPrimitiveType).toBe(PTE.Int32);
+      expect(matrix.elementPrimitiveType).toBe(PrimitiveTypeEnumeration.Int32);
 
       // Sparse arrays: nulls filled by ObjectNullMultiple/ObjectNullMultiple256
       const sparse = root.members['SparseSmall'] as (string | null)[];

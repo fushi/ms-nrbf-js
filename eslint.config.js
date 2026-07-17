@@ -14,6 +14,7 @@ export default tseslint.config(
       '@stylistic': stylistic
     },
     rules: {
+      'no-duplicate-imports': 'error',
 			'prefer-const': 'error',
       'sort-keys': 'error',
       '@stylistic/indent': ['error', 2],
