@@ -553,17 +553,11 @@ class Deserializer {
     } else {
       // MethodReturn: items in order per §2.2.3.4 — ReturnValue, OutputArguments, Exception, CallContext, Properties.
       if (messageEnum & MessageFlags.ReturnValueInArray) {
-        const idx = arr.length;
-        const val = this.readReferenceableValue((v) => { arr[idx] = v; result.returnValue = v; });
-        arr.push(val);
-        result.returnValue = val;
+        this.readScalarIntoArray(arr, (v) => { result.returnValue = v; });
       }
       if (messageEnum & MessageFlags.ArgsInArray) this.readArgsInArray(arr, result);
       if (messageEnum & MessageFlags.ExceptionInArray) {
-        const idx = arr.length;
-        const val = this.readReferenceableValue((v) => { arr[idx] = v; result.exception = v as NrbfObject; });
-        arr.push(val);
-        result.exception = val as NrbfObject;
+        this.readScalarIntoArray(arr, (v) => { result.exception = v as NrbfObject; });
       }
       this.readOptionalCallContext(messageEnum, arr, result);
       this.readOptionalArrayValue(messageEnum, MessageFlags.PropertiesInArray, arr, (v) => { result.messageProperties = v; }, "messageProperties");
@@ -590,12 +584,16 @@ class Deserializer {
     if (Array.isArray(val)) set(val);
   }
 
+  private readScalarIntoArray(arr: NrbfValue[], set: (v: NrbfValue) => void): void {
+    const idx = arr.length;
+    const val = this.readReferenceableValue((v) => { arr[idx] = v; set(v); });
+    arr.push(val);
+    set(val);
+  }
+
   private readOptionalCallContext(messageEnum: number, arr: NrbfValue[], result: NrbfMethodCall | NrbfMethodReturn): void {
     if (!(messageEnum & MessageFlags.ContextInArray)) return;
-    const idx = arr.length;
-    const ctx = this.readReferenceableValue((v) => { arr[idx] = v; result.callContext = v as string | NrbfObject; });
-    arr.push(ctx);
-    result.callContext = ctx as string | NrbfObject;
+    this.readScalarIntoArray(arr, (v) => { result.callContext = v as string | NrbfObject; });
   }
 
   // §2.2.2.2 — PrimitiveTypeEnum(18) + LengthPrefixedString
