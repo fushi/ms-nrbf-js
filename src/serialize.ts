@@ -10,16 +10,14 @@ import {
   isDateTime,
   isNrbfArray,
   isNrbfObject,
-} from './types.js';
-import type {
-  MemberTypeEntry,
-  NrbfArray,
-  NrbfMethodCall,
-  NrbfMethodReturn,
-  NrbfObject,
-  NrbfRoot,
-  NrbfValue,
-  PrimitiveValue,
+  type MemberTypeEntry,
+  type NrbfArray,
+  type NrbfMethodCall,
+  type NrbfMethodReturn,
+  type NrbfObject,
+  type NrbfRoot,
+  type NrbfValue,
+  type PrimitiveValue,
 } from './types.js';
 
 // ---------------------------------------------------------------------------
