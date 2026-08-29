@@ -23,6 +23,14 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fushi/ms-nrbf-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fushi/ms-nrbf-js/issues"
+  },
+  "homepage": "https://github.com/fushi/ms-nrbf-js#readme",
   "scripts": {
     "build": "tsc",
     "lint": "eslint src/",
